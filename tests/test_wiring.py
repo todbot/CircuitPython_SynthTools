@@ -1,0 +1,444 @@
+"""Integration checks for synthlib's Synth against the synthio stubs.
+
+Proves the things CLAUDE-synthlib.md sections 4-5 depend on: block identity
+and sharing, in-place buffer rewrites, param routing, and -- new -- that the
+patch is NOT live state. No DSP: the stubs do not render audio.
+
+The filter cutoff bus:
+
+    SHARED   filt_base = MID(SUM(filt_f, filt_lfo), FMIN, FMAX)
+    VOICE    cutoff    = MID(SUM(filt_base, fenv, vel_hz), FMIN, FMAX)
+                           vel_hz = PRODUCT(filt_vel, vel/127)
+                           fenv   = CONSTRAINED_LERP(0.0, depth, pos)
+                                      depth = shared amount, or
+                                              PRODUCT(amount, gain)
+                                      gain  = LERP(1, vel/127, fenv_vel)
+                                      pos   = LFO(shared shape, once=True)
+
+    python3 tests/test_wiring.py
+    micropython tests/test_wiring.py
+"""
+
+import sys
+
+_D = __file__.rsplit("/", 1)[0] if "/" in __file__ else "."
+sys.path.insert(0, _D + "/stubs")
+sys.path.insert(0, _D + "/..")
+
+import synthio  # noqa: E402
+import synthlib  # noqa: E402
+from synthlib import Patch, SubtractiveSynth  # noqa: E402
+from synthlib.ahr_envelope import AHREnvelope  # noqa: E402
+from synthlib.waves import ENV_PEAK  # noqa: E402
+
+fails = []
+
+
+def ck(cond, msg):
+    if not cond:
+        fails.append(msg)
+
+
+def vals(a):
+    return [int(v) for v in a]
+
+
+# --- the package must survive a missing optional dependency --------------
+# synthlib/__init__.py wraps the wavetable import in try/except ImportError
+# so a device without adafruit_wave still gets the rest of the package.
+# There is no adafruit_wave stub here, so that path is exercised every run
+# -- which also means WavetableSynth itself is NOT covered by these tests.
+ck(hasattr(synthlib, "Synth") and hasattr(synthlib, "SubtractiveSynth"),
+   "core exports must survive a missing adafruit_wave")
+ck(not hasattr(synthlib, "WavetableSynth"),
+   "without adafruit_wave, WavetableSynth should be absent rather than raising "
+   "-- if this fails, a real adafruit_wave is installed and the graceful "
+   "degradation path is no longer being tested")
+
+# --- patch defaults and JSON round-trip ----------------------------------
+p = Patch()
+ck(p.fenv_curve == 1, "default fenv_curve should be 1, got %r" % p.fenv_curve)
+ck("fenv_curve" in p.to_dict(), "fenv_curve must appear in to_dict()")
+ck("filt_lfo_amount" in p.to_dict(), "filt_lfo_amount must appear in to_dict()")
+ck(Patch.from_json(Patch(fenv_curve=3).to_json()).fenv_curve == 3,
+   "fenv_curve must survive a JSON round-trip")
+ck(Patch.from_json('{"name":"old","filt_f":900}').fenv_curve == 1,
+   "legacy patch without fenv_curve must default to linear")
+ck(Patch.from_json('{"name":"old","filt_f":900}').filt_lfo_amount == 0,
+   "legacy patch without filt_lfo_amount must default to off")
+# fenv_hold is gone, but old patch files still carry it: Patch's setattr
+# loop must accept it as an inert extra rather than raising.
+ck(Patch.from_json('{"fenv_hold":0.2}').fenv_hold == 0.2,
+   "a retired field must still load as a harmless extra attribute")
+
+# --- synth construction --------------------------------------------------
+sio = synthio.Synthesizer()
+s = SubtractiveSynth(sio, Patch(filt_f=1000, fenv_amount=3000,
+                                fenv_attack=0.1, fenv_release=0.3))
+
+for name in ("fenv_curve", "filt_vel", "fenv_vel",
+             "filt_lfo_rate", "filt_lfo_amount"):
+    ck(name in s._PARAMS, "%s must be in the _PARAMS whitelist" % name)
+ck("fenv_hold" not in s._PARAMS, "fenv_hold must be gone from _PARAMS")
+
+ck(s.fenv_curve == 1, "synth.fenv_curve must read live state")
+ck(s._vib_lfo in sio.blocks,
+   "the vibrato LFO must be appended to synth.blocks or it never ticks")
+ck(s._filt_lfo in sio.blocks,
+   "the filter LFO must be appended to synth.blocks or it never ticks")
+
+# --- the shared half of the cutoff bus -----------------------------------
+ck(s._filt_sum.a is s._filt_f_blk, "the bus must sum the shared filt_f block")
+ck(s._filt_sum.b is s._filt_lfo, "...and the shared filter LFO")
+ck(s._filt_base.operation == "MID", "the shared base must be clamped")
+ck(s._filt_base.a is s._filt_sum, "the clamp must wrap the sum")
+s.filt_lfo_amount = 1500
+ck(s._filt_lfo.scale == 1500,
+   "filt_lfo_amount must be one write into the shared LFO's scale")
+s.filt_lfo_rate = 3.0
+ck(s._filt_lfo.rate == 3.0, "filt_lfo_rate must be one write")
+s.filt_lfo_amount = 0     # the stubs render no DSP; the sweep itself is a
+s.filt_lfo_rate = 0.5     # hardware-tier check
+
+# --- the shared base is clamped ------------------------------------------
+s.filt_f = 1
+ck(abs(s._filt_base.value - s.FILT_F_MIN) < 1e-6,
+   "an absurdly low filt_f must clamp to FILT_F_MIN, got %r" % s._filt_base.value)
+s.filt_f = 999999
+ck(abs(s._filt_base.value - s.FILT_F_MAX) < 1e-6,
+   "an absurdly high filt_f must clamp to FILT_F_MAX, got %r" % s._filt_base.value)
+s.filt_f = 1000
+
+env_obj = s._fenv
+lin_shape = vals(env_obj._wave)
+buf = env_obj._wave
+blk_f, blk_q = s._filt_f_blk, s._filt_q_blk
+base_blk = s._filt_base
+
+# --- blocks and buffers must survive a patch reload ----------------------
+# Sounding voices hold references to these, so identity has to be stable.
+s.load_patch(Patch(filt_f=1234, fenv_amount=2000))
+ck(s._filt_f_blk is blk_f, "filt_f block must be written, never replaced")
+ck(s._filt_q_blk is blk_q, "filt_q block must be written, never replaced")
+ck(s._filt_base is base_blk, "the shared cutoff base must never be replaced")
+ck(s._fenv is env_obj, "the AHREnvelope must be written, never replaced")
+ck(s._fenv._wave is buf, "the shape buffer must survive a patch reload")
+ck(s._fenv._amt is env_obj._amt, "the depth block must survive a patch reload")
+ck(s._filt_f_blk.a == 1234, "patch reload must push filt_f into the shared block")
+ck(s._fenv.amount == 2000, "patch reload must push fenv_amount into the envelope")
+
+# =====================================================================
+# the patch is NOT live state
+# =====================================================================
+pat = Patch(filt_f=1000, filt_q=1.1, wave="SAW", detune=1.002,
+            amp_env=[0.01, 0.10, 0.8, 0.35], fenv_amount=3000,
+            fenv_attack=0.1, fenv_release=0.3)
+s.load_patch(pat)
+
+s.filt_f = 2000
+s.attack_time = 0.5
+s.release_time = 0.9      # index 3: the one a wrong _decompile would drop
+s.fenv_amount = 500
+s.wave = "SQU"
+s.detune = 1.5
+s.filt_lfo_amount = 700
+
+ck(pat.filt_f == 1000, "a knob turn must NOT reach the patch")
+ck(pat.amp_env[0] == 0.01 and pat.amp_env[3] == 0.35,
+   "amp_env must be COPIED at load, not aliased -- otherwise an in-place "
+   "element write leaks straight into the patch")
+ck(pat.fenv_amount == 3000, "fenv_amount must not reach the patch either")
+ck(pat.wave == "SAW", "a subclass param must not reach the patch")
+
+ck(s.filt_f == 2000, "the getter must read live state, got %r" % s.filt_f)
+ck(s.attack_time == 0.5, "attack_time getter must read live state")
+ck(s.release_time == 0.9, "release_time getter must read live state")
+ck(s.fenv_amount == 500, "fenv_amount getter must read live state")
+ck(s.wave == "SQU", "wave getter must read live state")
+ck(s.detune == 1.5, "detune getter must read live state")
+
+ret = s.save_patch()
+ck(ret is pat, "save_patch() must return the loaded patch object")
+ck(pat.filt_f == 2000, "save_patch() must commit filt_f")
+ck(pat.amp_env[0] == 0.5 and pat.amp_env[3] == 0.9,
+   "save_patch() must commit EVERY amp_env stage, not just the first")
+ck(pat.fenv_amount == 500, "save_patch() must commit fenv_amount")
+ck(pat.filt_lfo_amount == 700, "save_patch() must commit filt_lfo_amount")
+ck(pat.wave == "SQU" and pat.detune == 1.5,
+   "save_patch() must reach the subclass's _decompile() too")
+
+# and the committed patch must not become an alias either
+s.attack_time = 0.7
+ck(pat.amp_env[0] == 0.5,
+   "amp_env must be copied OUT by _decompile too, or knob turns after a save "
+   "keep leaking into the patch")
+
+# --- a patch file older than the current fields must LOAD, not just parse ---
+# Patch.__init__ sets every default BEFORE applying kwargs, so any Patch --
+# however old the JSON -- always carries the newer fields, and _recompile can
+# read p.filt_lfo_rate & co. unguarded. That is a property of Patch, not an
+# accident, so it is worth a test that drives it all the way through the
+# engine rather than only checking Patch's own defaults.
+legacy = Patch.from_json('{"name":"old","filt_f":900,"fenv_hold":0.2,'
+                         '"filt_type":"LPF","fenv_amount":1000}')
+s.load_patch(legacy)                  # must not raise
+ck(s.filt_lfo_rate == 0.5, "a pre-filter-LFO patch must load with the default")
+ck(s.filt_vel == 0, "a pre-velocity patch must load with no velocity response")
+s.note_on(60, velocity=100)           # and the note-on path must survive it
+ck(60 in s.voices, "a legacy patch must still play")
+s.all_notes_off()
+# the retired field rides along untouched -- Patch round-trips unknown keys,
+# and _decompile has no reason to touch one it does not own
+s.save_patch()
+ck(legacy.to_dict().get("fenv_hold") == 0.2,
+   "a retired field must survive save_patch() as an inert extra, neither "
+   "consumed nor rewritten")
+
+# reloading is therefore a revert
+s.load_patch(Patch(filt_f=1000, fenv_amount=3000,
+                   fenv_attack=0.1, fenv_release=0.3))
+ck(s.filt_f == 1000, "load_patch must overwrite live state")
+
+# --- note on: the shared graph must reach the voice ----------------------
+# filt_vel and fenv_vel are both 0 here, so this is also the check that the
+# common case allocates as little as possible.
+s.note_on(60)
+ck(len(sio.pressed) == 2,
+   "detune != 1.0 should press 2 notes, got %d" % len(sio.pressed))
+env = s._fenvs[60]
+ck(env.operation == "CONSTRAINED_LERP",
+   "the voice envelope must be a CONSTRAINED_LERP")
+ck(env.a == 0.0, "the envelope is a modulation SOURCE: it must rise from 0")
+ck(env.b is s._fenv._amt,
+   "with fenv_vel=0 the depth must BE the shared amount block, no extra Math")
+pos = env.c
+ck(pos.waveform is s._fenv._wave,
+   "the position LFO must read the shared shape buffer")
+ck(pos.rate is s._fenv._rate_a,
+   "the position LFO must use the shared attack rate")
+ck(pos.once, "the position LFO must be one-shot")
+
+cutoff = s.voices[60][0].filter.frequency
+ck(cutoff.operation == "MID", "the voice cutoff must be clamped")
+ck(cutoff.a.operation == "SUM", "...over a SUM of the modulation sources")
+ck(cutoff.a.a is s._filt_base, "the voice must nest the shared base")
+ck(cutoff.a.b is env, "...and its own envelope")
+ck(cutoff.a.c == 0.0, "with filt_vel=0 the velocity term must be a literal 0")
+for n in sio.pressed:
+    ck(n.bend is s._bend, "every note must share the one bend graph")
+    ck(n.filter.frequency is cutoff,
+       "every Note of one voice must share ONE cutoff graph")
+
+# --- globals stay O(1) while the voice sounds ----------------------------
+pos.phase = 1.0                       # envelope at full depth
+s.filt_f = 800
+ck(s._filt_f_blk.a == 800, "filt_f must be one write into the shared block")
+ck(cutoff.a.a is s._filt_base, "the sounding voice must still point at the base")
+ck(abs(cutoff.value - (800 + 3000)) < 1e-6,
+   "the voice's cutoff must follow filt_f, got %r" % cutoff.value)
+s.fenv_amount = 2500
+ck(abs(cutoff.value - (800 + 2500)) < 1e-6,
+   "the voice's cutoff must follow fenv_amount, got %r" % cutoff.value)
+s.fenv_amount = 3000
+s.filt_f = 1000
+
+# --- the curve is live: change it while a voice is sounding --------------
+s.set_param("fenv_curve", 2)
+ck(s._fenv._wave is buf, "the shape buffer must be rewritten IN PLACE, not replaced")
+ck(pos.waveform is s._fenv._wave, "sounding voice must still see the shared buffer")
+cur_shape = vals(s._fenv._wave)
+ck(cur_shape != lin_shape, "the shape must change when fenv_curve changes")
+ck(cur_shape[0] == 0 and cur_shape[-1] == ENV_PEAK, "curved endpoints must hold")
+# the rise now fills the whole buffer, so every interior sample is comparable
+ck(all(c <= lin for c, lin in zip(cur_shape, lin_shape)),
+   "curve=2 must never sit above linear")
+ck(cur_shape[32] < lin_shape[32], "curve=2 must sit below linear mid-rise")
+s.set_param("fenv_curve", 1)
+
+# --- release: endpoints swap, waveform is NEVER reassigned ---------------
+# synthio.LFO.waveform is read-only on real hardware, so a release that
+# reassigns it raises AttributeError at every note-off. The stub enforces
+# that too -- check the guard itself still works, or this whole section
+# quietly stops meaning anything.
+try:
+    pos.waveform = s._fenv._wave
+    fails.append("the synthio stub must refuse to reassign LFO.waveform, "
+                 "the way real synthio does -- otherwise it cannot catch the "
+                 "bug it exists to catch")
+except AttributeError:
+    pass
+wave_before = pos.waveform
+pos.phase = 0.5                      # part-way up the rise
+mid = cutoff.value
+s.note_off(60)
+ck(pos.waveform is wave_before, "release must NOT reassign the LFO's waveform")
+ck(pos.rate is s._fenv._rate_r, "release must swap to the shared release rate")
+ck(env.b == 0.0, "release must aim the envelope back at zero")
+ck(abs(cutoff.value - mid) < 1e-6,
+   "release must start exactly where the attack got to: %r -> %r"
+   % (mid, cutoff.value))
+pos.phase = 1.0
+ck(abs(cutoff.value - s._filt_base.value) < 1e-6,
+   "a fully released voice must sit on the shared base, got %r want %r"
+   % (cutoff.value, s._filt_base.value))
+ck(60 not in s.voices and 60 not in s._fenvs, "note_off must drop the voice")
+
+# --- fenv_amount == 0 costs nothing --------------------------------------
+s.fenv_amount = 0
+s.note_on(64)
+ck(64 not in s._fenvs, "no filter envelope should be built when fenv_amount is 0")
+ck(sio.pressed[-1].filter.frequency is s._filt_base,
+   "with no modulation at all the Biquad must ride the SHARED base directly, "
+   "allocating nothing per voice")
+s.all_notes_off()
+s.fenv_amount = 3000
+
+# --- set_param is a whitelist --------------------------------------------
+try:
+    s.set_param("fenv_curv", 2)
+    fails.append("set_param must reject names outside _PARAMS")
+except KeyError:
+    pass
+
+# --- all_notes_off leaves nothing behind ---------------------------------
+s.note_on(60)
+s.note_on(67)
+s.all_notes_off()
+ck(not s.voices, "all_notes_off must clear every voice")
+ck(not s._fenvs, "all_notes_off must clear every filter envelope")
+
+# =====================================================================
+# velocity -> filter cutoff, and velocity -> envelope depth
+# =====================================================================
+
+# --- reusability: the envelope must work with no filter anywhere ---------
+# This is the property a future pitch envelope needs -- the envelope takes
+# no destination at all, and nothing here touches a Biquad.
+solo = AHREnvelope(attack=0.1, release=0.2, amount=1.0)
+senv = solo.make()
+ck(senv is not None, "a standalone AHREnvelope must build a block")
+ck(senv.a == 0.0, "a standalone envelope must rise from 0")
+ck(senv.c.waveform is solo._wave, "standalone must use its own shape buffer")
+senv.c.phase = 1.0
+ck(abs(senv.value - 1.0) < 1e-6,
+   "standalone must reach its amount, got %r" % senv.value)
+solo.start_release(senv)
+senv.c.phase = 1.0
+ck(abs(senv.value - 0.0) < 1e-6, "standalone release must return to zero")
+ck(AHREnvelope(amount=0).make() is None, "amount=0 must build nothing")
+
+# --- velocity -> cutoff ---------------------------------------------------
+FV = 2000
+s.load_patch(Patch(filt_f=1000, filt_vel=FV, fenv_amount=0))
+s.note_on(60, velocity=127)
+hard = s.voices[60][0].filter.frequency
+s.note_on(64, velocity=32)
+soft = s.voices[64][0].filter.frequency
+
+ck(hard is not soft, "different velocities must get different cutoff blocks")
+ck(abs(hard.value - (1000 + FV)) < 1e-6,
+   "velocity 127 must give filt_f + filt_vel, got %r" % hard.value)
+ck(abs(soft.value - (1000 + (32 / 127.0) * FV)) < 1e-6,
+   "velocity 32 must give filt_f + (32/127)*filt_vel, got %r" % soft.value)
+ck(hard.a.a is s._filt_base and soft.a.a is s._filt_base,
+   "both per-voice cutoffs must nest the shared base")
+ck(hard.a.c.a is s._filt_vel_blk,
+   "the velocity term must nest the SHARED filt_vel block, not a baked float")
+s.filt_f = 500
+ck(abs(hard.value - (500 + FV)) < 1e-6,
+   "filt_f must remain O(1) through the per-voice block")
+ck(abs(soft.value - (500 + (32 / 127.0) * FV)) < 1e-6, "...for every voice")
+# filt_vel is a block now, so it reaches a voice that is ALREADY sounding
+s.filt_vel = 1000
+ck(abs(hard.value - (500 + 1000)) < 1e-6,
+   "filt_vel must stay live for a sounding voice, got %r" % hard.value)
+s.all_notes_off()
+
+# --- signed filt_vel: hard playing closes the filter ---------------------
+s.load_patch(Patch(filt_f=3000, filt_vel=-2000, fenv_amount=0))
+s.note_on(60, velocity=127)
+s.note_on(64, velocity=0)
+ck(abs(s.voices[60][0].filter.frequency.value - 1000) < 1e-6,
+   "a negative filt_vel must CLOSE the filter at full velocity, got %r"
+   % s.voices[60][0].filter.frequency.value)
+ck(abs(s.voices[64][0].filter.frequency.value - 3000) < 1e-6,
+   "...and leave velocity 0 at the base")
+s.all_notes_off()
+
+# --- the per-voice sum is clamped too ------------------------------------
+# a downward envelope is a normal patch, and it can take the sum negative
+s.load_patch(Patch(filt_f=1000, fenv_amount=-5000, fenv_attack=0.1))
+s.note_on(60, velocity=127)
+c = s.voices[60][0].filter.frequency
+s._fenvs[60].c.phase = 1.0
+ck(abs(c.value - s.FILT_F_MIN) < 1e-6,
+   "a downward sweep past zero must clamp to FILT_F_MIN, got %r" % c.value)
+s.all_notes_off()
+
+# --- velocity -> envelope depth ------------------------------------------
+s.load_patch(Patch(filt_f=1000, fenv_amount=3000, fenv_vel=1.0,
+                   fenv_attack=0.1, fenv_release=0.3))
+s.note_on(60, velocity=127)
+s.note_on(64, velocity=64)
+e_hard, e_soft = s._fenvs[60], s._fenvs[64]
+e_hard.c.phase = 1.0
+e_soft.c.phase = 1.0
+# gain 1.0 collapses to the shared block; anything else wraps it in a PRODUCT
+ck(e_hard.b.a is s._fenv._amt or e_hard.b is s._fenv._amt,
+   "the hard voice's depth must still nest the shared amount block")
+ck(e_soft.b.a is s._fenv._amt, "a scaled voice must still nest the shared block")
+ck(e_soft.b.b.c is s._fenv_vel_blk,
+   "the velocity gain must nest the SHARED fenv_vel block, not a baked float")
+ck(abs(e_hard.value - 3000) < 1e-6,
+   "full velocity depth = fenv_amount, got %r" % e_hard.value)
+ck(abs(e_soft.value - 3000 * 64 / 127.0) < 1e-6,
+   "velocity 64 must scale depth by vel/127, got %r" % e_soft.value)
+# the shared depth must still reach BOTH voices with one write
+s.fenv_amount = 1000
+ck(abs(e_hard.value - 1000) < 1e-6, "fenv_amount stays O(1) with velocity scaling")
+ck(abs(e_soft.value - 1000 * 64 / 127.0) < 1e-6, "...for the scaled voice too")
+# and so must fenv_vel itself, which the old Python-side gain could not do
+s.fenv_vel = 0.0
+ck(abs(e_soft.value - 1000) < 1e-6,
+   "fenv_vel must stay LIVE for a sounding voice: dropping it to 0 must "
+   "restore full depth, got %r" % e_soft.value)
+s.all_notes_off()
+
+# a velocity-0 note with full tracking sweeps nothing, but must not raise
+s.load_patch(Patch(filt_f=1000, fenv_amount=3000, fenv_vel=1.0))
+s.note_on(72, velocity=0)
+ck(72 in s._fenvs, "a zero-gain voice still gets an envelope (fenv_vel is live)")
+ck(abs(s._fenvs[72].b.value) < 1e-6, "...whose depth is currently zero")
+s.note_off(72)          # must not raise
+s.all_notes_off()
+
+# --- release continuity with every combination of the velocity terms -----
+for fv, filt_vel in ((0.0, 0), (0.75, 0), (0.75, 2000)):
+    s.load_patch(Patch(filt_f=1000, fenv_amount=3000, fenv_vel=fv,
+                       filt_vel=filt_vel, fenv_attack=0.1, fenv_release=0.3))
+    s.note_on(60, velocity=40)
+    e = s._fenvs[60]
+    c = s.voices[60][0].filter.frequency
+    e.c.phase = 0.4
+    before = c.value
+    s.note_off(60)
+    ck(abs(c.value - before) < 1e-6,
+       "release continuous (fenv_vel=%s filt_vel=%s): %r -> %r"
+       % (fv, filt_vel, before, c.value))
+    e.c.phase = 1.0
+    # the envelope falls to 0; the velocity offset is static and stays
+    want = 1000 + filt_vel * 40 / 127.0
+    ck(abs(c.value - want) < 1e-6,
+       "release lands on base+velocity (fenv_vel=%s filt_vel=%s): %r want %r"
+       % (fv, filt_vel, c.value, want))
+    s.all_notes_off()
+
+print("shape linear:", [lin_shape[i] for i in (0, 16, 32, 48, 63)])
+print("shape curve2:", [cur_shape[i] for i in (0, 16, 32, 48, 63)])
+print()
+if fails:
+    print("FAILURES (%d):" % len(fails))
+    for f in fails:
+        print("  -", f)
+    sys.exit(1)
+print("test_wiring: all checks passed")

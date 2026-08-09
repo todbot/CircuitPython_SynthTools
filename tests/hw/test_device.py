@@ -1,0 +1,291 @@
+import time
+import synthio
+
+from synth_setup import synth as engine, mixer
+from synthlib import Patch, SubtractiveSynth
+from synthlib.ahr_envelope import AHREnvelope
+
+mixer.voice[0].level = 0.0          # verify the block graph, don't make noise
+
+fails = []
+
+
+def ck(cond, msg):
+    print(("  ok  " if cond else "  FAIL") + "  " + msg)
+    if not cond:
+        fails.append(msg)
+
+
+def settle(t=0.25):
+    time.sleep(t)
+
+
+print("--- 10.2  MathOperation arithmetic matches the docs ---------------")
+for op, a, b, c, want, name in (
+    (synthio.MathOperation.PRODUCT, 2.0, 3.0, 4.0, 24.0, "PRODUCT a*b*c"),
+    (synthio.MathOperation.SUM, 2.0, 3.0, 4.0, 9.0, "SUM a+b+c"),
+    (synthio.MathOperation.LERP, 10.0, 20.0, 0.25, 12.5, "LERP a*(1-c)+b*c"),
+    (synthio.MathOperation.MID, 5.0, 1.0, 9.0, 5.0, "MID middle-of-three"),
+    (synthio.MathOperation.MID, -7.0, 20.0, 20000.0, 20.0, "MID clamps low"),
+):
+    m = synthio.Math(op, a, b, c)
+    engine.blocks.append(m)
+    settle(0.1)
+    ck(abs(m.value - want) < 0.001, "%s == %s, got %r" % (name, want, m.value))
+    engine.blocks.remove(m)
+
+print("--- PROBE: what does Biquad do with a negative frequency? --------")
+# This is why the cutoff bus is clamped with MID. If Biquad turns out to
+# handle it gracefully, FILT_F_MIN/FILT_F_MAX and both clamp blocks can go.
+try:
+    bq = synthio.Biquad(synthio.FilterMode.LOW_PASS, frequency=-500.0, Q=1.0)
+    n = synthio.Note(440, filter=bq)
+    engine.press(n)
+    settle(0.2)
+    engine.release(n)
+    settle(0.2)
+    print("      NEGATIVE Biquad.frequency was ACCEPTED and did not crash")
+    print("      -> the MID clamp is defensive only; audio quality unknown")
+except Exception as e:      # noqa: BLE001 -- this is the whole point
+    print("      NEGATIVE Biquad.frequency raised %s: %s" % (type(e).__name__, e))
+    print("      -> the MID clamp is MANDATORY, keep it")
+
+print("--- 10.1 / 10.5  blocks nest, and Biquad.frequency takes one -----")
+patch = Patch(name="hw", wave="SAW", detune=1.0, filt_type="LPF",
+              filt_f=1000, filt_q=1.2, fenv_amount=3000,
+              fenv_attack=0.5, fenv_release=0.5,
+              amp_env=[0.01, 0.1, 0.8, 2.0])
+s = SubtractiveSynth(engine, patch)
+
+s.note_on(60, velocity=127)
+settle(0.05)
+env = s._fenvs[60]
+note = s.voices[60][0]
+cutoff = note.filter.frequency
+ck(note.filter is not None, "voice got a Biquad")
+ck(cutoff.a.a is s._filt_base, "the voice's cutoff nests the shared base")
+ck(cutoff.a.b is env, "...and its own envelope")
+ck(env.a == 0.0, "the envelope is a source: it rises from 0")
+ck(env.b is s._fenv._amt, "depth IS the shared amount block at gain 1.0")
+ck(env.c.waveform is s._fenv._wave, "position LFO reads the shared shape buffer")
+ck(s._filt_lfo in engine.blocks, "the filter LFO must be in synth.blocks")
+
+print("--- the envelope actually sweeps --------------------------------")
+v0 = cutoff.value
+settle(0.3)
+v1 = cutoff.value
+settle(0.5)
+v2 = cutoff.value
+print("      %.1f -> %.1f -> %.1f   (base 1000, peak 4000)" % (v0, v1, v2))
+ck(v1 > v0 + 50, "rose during attack (%.1f -> %.1f)" % (v0, v1))
+ck(v2 > 3500, "reached near peak, got %.1f" % v2)
+
+print("--- PROBE: does a deep chain lag? --------------------------------")
+# cutoff -> SUM -> env -> depth(_amt) is 4 levels. Blocks update every 256
+# samples; if each level cost its own update, one write would take several
+# updates to land at the top.
+s.fenv_amount = 1500
+settle(0.02)                      # ~1 block update at 44.1kHz is ~5.8ms
+near = cutoff.value
+settle(0.3)
+later = cutoff.value
+print("      after ~20ms: %.1f    after ~320ms: %.1f  (want ~2500)" % (near, later))
+ck(abs(near - later) < 60,
+   "a global write must land at the deepest node within one update, not "
+   "propagate one level per update")
+s.fenv_amount = 3000
+settle(0.3)
+
+print("--- globals stay O(1) while the voice sounds --------------------")
+s.filt_f = 400
+settle(0.15)
+ck(abs(s._filt_f_blk.value - 400) < 0.001, "one write moved the shared cutoff")
+ck(abs(cutoff.value - 3400) < 20, "the voice followed it: %.1f" % cutoff.value)
+s.filt_f = 1000
+settle(0.15)
+
+print("--- the filter LFO reaches the voice ----------------------------")
+AMT = 600
+s.filt_lfo_amount = AMT
+s.filt_lfo_rate = 2.0
+settle(0.05)
+lo = hi = cutoff.value
+for _ in range(80):               # ~1.2s at 15ms: 2+ cycles, fine enough
+    settle(0.015)                 # sampling to land near the true extrema
+    v = cutoff.value
+    lo = min(lo, v)
+    hi = max(hi, v)
+swing = hi - lo
+print("      cutoff swung %.1f .. %.1f Hz  (width %.1f, want ~%d)"
+      % (lo, hi, swing, 2 * AMT))
+# bracket the WIDTH, not just "it moved": a half-wired LFO (one polarity,
+# or scale applied once instead of bipolar) would still pass a > 200 check.
+# Discrete sampling can only ever under-read the extrema, hence the slack.
+ck(1.5 * AMT < swing < 2.3 * AMT,
+   "filt_lfo_amount must swing the cutoff by ~2*amount, got %.1f" % swing)
+s.filt_lfo_amount = 0
+settle(0.2)
+
+print("--- 10.6  in-place shape rewrite under a sounding voice ---------")
+w = env.c.waveform
+s.fenv_curve = 2
+settle(0.1)
+ck(env.c.waveform is w, "voice still points at the same buffer object")
+ck(cutoff.value > 0, "voice still sane after the rewrite (%.1f)" % cutoff.value)
+s.fenv_curve = 1
+settle(0.4)
+
+print("--- 10.3  release WITHOUT reassigning waveform ------------------")
+peak = cutoff.value
+s.note_off(60)
+settle(0.02)
+just_after = cutoff.value
+ck(env.c.waveform is w, "release must NOT reassign the LFO waveform")
+ck(abs(peak - just_after) < 150,
+   "release starts where the attack got to: %.1f -> %.1f" % (peak, just_after))
+settle(0.7)
+print("      settled at %.1f (want ~1000 = base)" % cutoff.value)
+ck(abs(cutoff.value - 1000) < 60, "release landed on the base (%.1f)" % cutoff.value)
+s.all_notes_off()
+settle(0.3)
+
+print("--- release from MID-attack (the case that used to jump) --------")
+s.note_on(60, velocity=127)
+settle(0.25)
+c = s.voices[60][0].filter.frequency
+mid = c.value
+s.note_off(60)
+settle(0.02)
+print("      %.1f -> %.1f" % (mid, c.value))
+ck(abs(mid - c.value) < 150, "no jump on mid-attack release")
+settle(0.7)
+ck(abs(c.value - 1000) < 60, "still lands on base (%.1f)" % c.value)
+s.all_notes_off()
+settle(0.3)
+
+print("--- release really takes fenv_release seconds --------------------")
+# the retired hold used to shrink the rise to _frac of the buffer, which
+# forced _rate_r = _frac/release. With a full-buffer rise it is 1/release.
+s.load_patch(Patch(filt_type="LPF", filt_f=1000, filt_q=1.2, fenv_amount=3000,
+                   fenv_attack=0.1, fenv_release=0.5,
+                   amp_env=[0.01, 0.1, 0.8, 3.0]))
+s.note_on(60, velocity=127)
+settle(0.4)                       # well past the attack
+c = s.voices[60][0].filter.frequency
+s.note_off(60)
+t0 = time.monotonic()
+while c.value > 1100 and time.monotonic() - t0 < 2.0:
+    time.sleep(0.005)
+took = time.monotonic() - t0
+print("      release took %.2fs (set to 0.50s)" % took)
+ck(0.35 < took < 0.70, "release duration must match fenv_release, got %.2fs" % took)
+s.all_notes_off()
+settle(0.3)
+
+print("--- velocity -> cutoff (filt_vel), including negative ------------")
+s.load_patch(Patch(filt_type="LPF", filt_f=1000, filt_vel=2000, filt_q=1.2,
+                   fenv_amount=0, amp_env=[0.01, 0.1, 0.8, 0.2]))
+s.note_on(60, velocity=127)
+s.note_on(64, velocity=32)
+settle(0.15)
+hard = s.voices[60][0].filter.frequency
+soft = s.voices[64][0].filter.frequency
+print("      vel127 -> %.1f Hz    vel32 -> %.1f Hz" % (hard.value, soft.value))
+ck(abs(hard.value - 3000.0) < 1.0, "vel 127 gives filt_f+filt_vel = 3000")
+ck(abs(soft.value - (1000 + (32 / 127) * 2000)) < 1.0, "vel 32 scales correctly")
+s.filt_f = 500
+settle(0.15)
+ck(abs(hard.value - 2500.0) < 1.0, "filt_f still O(1) through the per-voice block")
+ck(abs(soft.value - (500 + (32 / 127) * 2000)) < 1.0, "...for every voice")
+# filt_vel is a shared block now, so it reaches a voice already sounding
+s.filt_vel = -400
+settle(0.15)
+ck(abs(hard.value - 100.0) < 1.0,
+   "filt_vel must stay LIVE for a sounding voice, got %.1f" % hard.value)
+s.all_notes_off()
+settle(0.3)
+
+print("--- velocity -> envelope depth (fenv_vel), live ------------------")
+s.load_patch(Patch(filt_type="LPF", filt_f=1000, fenv_amount=3000, fenv_vel=1.0,
+                   fenv_attack=0.3, fenv_release=0.3,
+                   amp_env=[0.01, 0.1, 0.8, 0.2]))
+s.note_on(60, velocity=127)
+s.note_on(64, velocity=64)
+settle(0.7)
+h, sf = s._fenvs[60], s._fenvs[64]
+print("      vel127 depth %.1f Hz   vel64 depth %.1f Hz" % (h.value, sf.value))
+ck(abs(h.value - 3000) < 30, "full velocity depth = fenv_amount")
+ck(abs(sf.value - 3000 * 64 / 127) < 30, "velocity 64 scales the depth")
+s.fenv_vel = 0.0
+settle(0.15)
+ck(abs(sf.value - 3000) < 30,
+   "fenv_vel must stay LIVE: dropping it restores full depth (%.1f)" % sf.value)
+s.all_notes_off()
+settle(0.3)
+
+print("--- the cutoff bus clamps -----------------------------------------")
+s.load_patch(Patch(filt_type="LPF", filt_f=1000, fenv_amount=-5000,
+                   fenv_attack=0.2, fenv_release=0.2,
+                   amp_env=[0.01, 0.1, 0.8, 1.0]))
+s.note_on(60, velocity=127)
+settle(0.5)
+c = s.voices[60][0].filter.frequency
+print("      downward sweep past zero settled at %.1f Hz" % c.value)
+ck(abs(c.value - s.FILT_F_MIN) < 1.0, "must clamp at FILT_F_MIN, not go negative")
+s.all_notes_off()
+settle(0.3)
+
+print("--- release continuity with the velocity terms ------------------")
+for fv, filt_vel in ((0.0, 0), (0.75, 0), (0.75, 2000)):
+    s.load_patch(Patch(filt_type="LPF", filt_f=1000, fenv_amount=3000,
+                       fenv_vel=fv, filt_vel=filt_vel,
+                       fenv_attack=0.5, fenv_release=0.5,
+                       amp_env=[0.01, 0.1, 0.8, 2.0]))
+    s.note_on(60, velocity=40)
+    settle(0.25)
+    c = s.voices[60][0].filter.frequency
+    want = 1000 + filt_vel * 40 / 127
+    v_before = c.value
+    s.note_off(60)
+    settle(0.02)
+    ck(abs(v_before - c.value) < 150,
+       "fenv_vel=%s filt_vel=%s: %.1f -> %.1f" % (fv, filt_vel, v_before, c.value))
+    settle(0.9)
+    ck(abs(c.value - want) < 60,
+       "   ...and landed on base+velocity %.1f (got %.1f)" % (want, c.value))
+    s.all_notes_off()
+    settle(0.3)
+
+print("--- the patch is NOT live state ----------------------------------")
+pat = Patch(filt_type="LPF", filt_f=1000, wave="SAW", detune=1.0,
+            amp_env=[0.01, 0.1, 0.8, 0.3], fenv_amount=2000)
+s.load_patch(pat)
+s.filt_f = 2500
+s.attack_time = 0.4
+s.wave = "SQU"
+ck(pat.filt_f == 1000, "a knob turn must NOT reach the patch")
+ck(pat.amp_env[0] == 0.01, "amp_env must be copied at load, not aliased")
+ck(pat.wave == "SAW", "a subclass param must not reach the patch either")
+ck(s.filt_f == 2500, "the getter must read live state")
+s.save_patch()
+ck(pat.filt_f == 2500 and pat.amp_env[0] == 0.4 and pat.wave == "SQU",
+   "save_patch() must commit everything, subclass params included")
+
+print("--- AHREnvelope standalone (what a pitch env would need) ---------")
+solo = AHREnvelope(attack=0.3, release=0.3, amount=1.0)
+senv = solo.make()
+engine.blocks.append(senv)
+settle(0.7)
+print("      standalone value = %.3f (amount 1.0)" % senv.value)
+ck(senv.value > 0.9, "standalone envelope rose to its amount")
+solo.start_release(senv)
+settle(0.5)
+ck(senv.value < 0.15, "standalone envelope released to zero (%.3f)" % senv.value)
+engine.blocks.remove(senv)
+
+mixer.voice[0].level = 0.25
+print()
+print("FAILURES: %d" % len(fails))
+for f in fails:
+    print("  -", f)
+print("DONE")

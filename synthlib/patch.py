@@ -1,0 +1,96 @@
+# patch.py - pure-data patch objects, trivially JSON serializable.
+# Rule: only JSON-native types live here (str, int, float, bool, list).
+# Never a synthio object, never a ulab array.
+
+import json
+
+
+class Patch:
+    """A synth patch. Unknown kwargs land in __dict__ and round-trip
+    through JSON untouched, so synth-type-specific fields (wave_file,
+    wave_pos, ...) need no subclassing."""
+
+    def __init__(self, **kw):
+        self.name = "init"
+        self.synth_type = "subtractive"  # dispatch hint for patch banks
+        self.wave = "SAW"                # waveform name, see waves.py
+        self.detune = 1.001              # osc2 freq ratio, 1.0 = single osc
+        self.filt_type = "LPF"           # "LPF" | "HPF" | "BPF" | "NOTCH" | None
+        self.filt_f = 2500               # filter cutoff in Hz
+        self.filt_q = 1.1                # filter resonance
+        # list, not tuple: JSON round-trips it as a list anyway, and a list
+        # lets you set one stage in place (amp_env[0] = x) without rebuilding.
+        self.amp_env = [0.01, 0.10, 0.8, 0.35]  # attack, decay, sustain, release
+        self.vib_rate = 5.0    # Hz
+        self.vib_depth = 0.0   # in bend units: 1.0 = one octave, 0.006 ~ 10 cents
+        self.vib_delay = 0.0   # seconds before vibrato fades in (0 = immediate)
+        # --- the four filter-cutoff modulations -----------------------
+        # cutoff = filt_f + filt_lfo + fenv + velocity, summed in one
+        # synthio block graph. See synth.py.
+        # 1. filt_f above is the base.
+        # 2. cyclic LFO, bipolar Hz around the base
+        self.filt_lfo_rate = 0.5    # Hz
+        self.filt_lfo_amount = 0    # Hz of swing, +/-; 0 = off
+        # 3. AHR envelope, added to the cutoff in Hz. amount 0 = off (and
+        #    costs nothing: no per-voice blocks are created).
+        self.fenv_amount = 0      # Hz of cutoff swing; negative sweeps down
+        self.fenv_attack = 0.05   # seconds to reach full depth
+        self.fenv_release = 0.40  # seconds to fall back to zero
+        # integer exponent on the envelope's rise: 1 = linear,
+        # 2 = squared (slow start, fast finish), 3+ steeper
+        self.fenv_curve = 1
+        # 4. Velocity. The units differ on purpose: filt_vel adds to a
+        #    cutoff so it is in Hz, fenv_vel scales a depth so it is a
+        #    0-1 fraction. Both default to "velocity changes nothing".
+        self.filt_vel = 0     # Hz of cutoff at full velocity; negative
+        #                       means hard playing CLOSES the filter
+        self.fenv_vel = 0.0   # 0 = uniform depth, 1.0 = depth tracks velocity
+        # setattr loop, not self.__dict__.update(kw): CircuitPython's
+        # instance __dict__ is a read-only mapping and update() raises
+        # TypeError. Reading it (dict(self.__dict__)) is fine.
+        for k, v in kw.items():
+            setattr(self, k, v)
+
+    # --- dict / JSON round-trip -------------------------------------
+
+    def to_dict(self):
+        return dict(self.__dict__)
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls(**d)
+
+    def to_json(self):
+        return json.dumps(self.to_dict())
+
+    @classmethod
+    def from_json(cls, s):
+        return cls(**json.loads(s))
+
+    # --- filesystem helpers -----------------------------------------
+    # note: writing to CIRCUITPY from code requires storage.remount()
+
+    def save(self, filepath):
+        with open(filepath, "w") as f:
+            f.write(self.to_json())
+
+    @classmethod
+    def load(cls, filepath):
+        with open(filepath) as f:
+            return cls.from_json(f.read())
+
+    def __repr__(self):
+        return "Patch(%s)" % ", ".join(
+            "%s=%r" % (k, v) for k, v in sorted(self.__dict__.items()))
+
+
+# --- simple patch banks: a JSON list of patch dicts -----------------
+
+def save_patches(patches, filepath):
+    with open(filepath, "w") as f:
+        json.dump([p.to_dict() for p in patches], f)
+
+
+def load_patches(filepath):
+    with open(filepath) as f:
+        return [Patch.from_dict(d) for d in json.load(f)]
