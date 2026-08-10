@@ -412,15 +412,20 @@ settle(0.5)
 ck(senv.value < 0.15, "standalone envelope released to zero (%.3f)" % senv.value)
 engine.blocks.remove(senv)
 
-# the same class the other way up, which is all a pitch envelope is
-fall = AHREnvelope(attack=0.3, release=0.3, amount=1.0,
+# The same class the other way up, which is all a pitch envelope is.
+# NOTE the long attack: a falling envelope is already on its way down the
+# instant it exists, so the first reading has to be taken while barely any
+# of it has elapsed. At attack=0.3 a 0.05s settle is a sixth of the fall
+# and reads ~0.83 -- correct behaviour, but useless as a "starts at its
+# amount" check. At attack=1.5 the same settle is ~3%.
+fall = AHREnvelope(attack=1.5, release=0.3, amount=1.0,
                    falling=True, release_amount=0.5)
 fenv2 = fall.make()
 engine.blocks.append(fenv2)
 settle(0.05)
-print("      falling: starts %.3f" % fenv2.value)
+print("      falling: starts %.3f (3%% elapsed, want ~0.97)" % fenv2.value)
 ck(fenv2.value > 0.9, "a falling envelope must START at its amount")
-settle(0.6)
+settle(2.0)
 ck(abs(fenv2.value) < 0.06, "...and settle to 0 (%.3f)" % fenv2.value)
 fall.start_release(fenv2)
 settle(0.6)
