@@ -42,9 +42,15 @@ evidence that the pure-Python fallback is faithful.
   the last sample, and the *release* re-runs the same rising curve through a
   `CONSTRAINED_LERP` with swapped endpoints.
   Checks int16 range, endpoints, monotonicity, that `curve=1` stays
-  bit-identical to a plain linear ramp, and — the regression guard for the
-  retired hold segment — that a linear rise is *strictly* increasing, so a flat
-  run anywhere means a plateau has crept back in.
+  bit-identical to a plain linear ramp, that a linear rise is *strictly*
+  increasing (the regression guard for the retired hold segment — a flat run
+  means a plateau has crept back in), and that the release the shape implies is
+  a real decay rather than a mirrored attack.
+- `plot_env.py` — **not a test**: ASCII-plots the envelope over time for
+  curves 1/2/3, attack and release, including a released-mid-rise case. It reads
+  the real shared buffer and applies the real block arithmetic, so it cannot
+  drift from what the synth plays. Run it when reasoning about envelope shape;
+  it is how the mirrored-attack release below was found.
 - `test_wiring.py` — `Synth` against the synthio stubs: the cutoff modulation
   bus, block identity and sharing, in-place buffer rewrites, that global params
   stay one write *and stay live for sounding voices*, the release path, the
@@ -62,6 +68,17 @@ evidence that the pure-Python fallback is faithful.
   rejects a non-list right-hand side, so slice assignment from another array
   would fail.
 
+## A trap worth knowing before you edit envelope tests
+
+**Never test the release only at `fenv_curve = 1`.** At curve 1 the correct
+release shape and a mirrored-attack one are algebraically identical (`1-t == 1-t`),
+so the test proves nothing about curvature. A release that hung at the top and
+then fell off a cliff at curve>=2 once passed all three tiers for exactly this
+reason: both `test_wiring.py` and `tests/hw/test_device.py` set the curve to 2,
+checked the *buffer contents*, then reset it to 1 **before** their release
+sections. Both now release at curve=2 deliberately, and assert the envelope is
+past half its height by halfway through the release.
+
 ## Known coverage gap
 
 **`WavetableSynth` is not tested on either tier.** There is no `adafruit_wave`
@@ -74,13 +91,21 @@ most repay it.
 
 ## The hardware tier
 
+This tier needs a board physically plugged in, and it **writes to the CIRCUITPY
+drive**. Neither is a given: the board is often unplugged, and its serial port
+moves between sessions — it has come up as both `usbmodem11201` and
+`usbmodem21301`. Discover the port, never hardcode it:
+
 ```sh
+ls /dev/tty.usbmodem*                     # whatever it is today
+PORT=$(ls /dev/tty.usbmodem* | head -1)
+
 mkdir -p /Volumes/CIRCUITPY/synthlib
 cp synthlib/*.py /Volumes/CIRCUITPY/synthlib/
 cp examples/synth_setup.py /Volumes/CIRCUITPY/
 dot_clean -m /Volumes/CIRCUITPY/          # see below
 python3 tests/hw/run_on_device.py tests/hw/test_device.py \
-        --port /dev/tty.usbmodem21301 --timeout 180
+        --port "$PORT" --timeout 180
 ```
 
 **The `dot_clean` is not optional housekeeping.** Recent macOS tags files with a
@@ -92,9 +117,9 @@ actually works.
 
 `run_on_device.py` drives a board over the serial REPL with `pyserial`, using the
 raw REPL so the board's own `code.py` is only interrupted, never modified on
-disk. It takes `--port` (default `/dev/tty.usbmodem11201` — **check
-`ls /dev/tty.usbmodem*`, the number changes between boards and ports**) and
-`--reboot`.
+disk. It takes `--port` and `--reboot`. **Its default port,
+`/dev/tty.usbmodem11201`, is a guess and is regularly wrong** — pass `--port`
+explicitly.
 
 `test_device.py` needs `synthlib/` and `synth_setup.py` on the device, and it
 mutes the mixer while it runs — it is checking the block graph, not listening.

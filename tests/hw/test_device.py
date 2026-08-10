@@ -106,6 +106,9 @@ settle(0.15)
 
 print("--- the filter LFO reaches the voice ----------------------------")
 AMT = 600
+s.filt_lfo_amount = 0             # baseline: where the cutoff sits with no LFO
+settle(0.15)
+base_hz = cutoff.value
 s.filt_lfo_amount = AMT
 s.filt_lfo_rate = 2.0
 settle(0.05)
@@ -117,12 +120,20 @@ for _ in range(80):               # ~1.2s at 15ms: 2+ cycles, fine enough
     hi = max(hi, v)
 swing = hi - lo
 print("      cutoff swung %.1f .. %.1f Hz  (width %.1f, want ~%d)"
-      % (lo, hi, swing, 2 * AMT))
-# bracket the WIDTH, not just "it moved": a half-wired LFO (one polarity,
-# or scale applied once instead of bipolar) would still pass a > 200 check.
-# Discrete sampling can only ever under-read the extrema, hence the slack.
-ck(1.5 * AMT < swing < 2.3 * AMT,
-   "filt_lfo_amount must swing the cutoff by ~2*amount, got %.1f" % swing)
+      % (lo, hi, swing, AMT))
+# bracket the WIDTH, not just "it moved": a > 200 check would also pass a
+# half-wired LFO. The width is ~1*amount, not 2*amount, because the LFO is
+# ADDITIVE -- filt_f is the floor and it opens upward. If this reads ~2*AMT
+# the LFO's offset has been lost and the swing has recentred on filt_f.
+# Discrete sampling can only under-read the extrema, hence the slack.
+ck(0.75 * AMT < swing < 1.25 * AMT,
+   "filt_lfo_amount must swing the cutoff by ~1*amount, got %.1f" % swing)
+ck(lo > base_hz - 0.2 * AMT,
+   "the LFO must never pull the cutoff BELOW its unmodulated base: floor "
+   "%.1f, base %.1f" % (lo, base_hz))
+ck(hi > base_hz + 0.75 * AMT,
+   "...and must reach base+amount at its peak: %.1f vs %.1f"
+   % (hi, base_hz + AMT))
 s.filt_lfo_amount = 0
 settle(0.2)
 
@@ -160,6 +171,35 @@ print("      %.1f -> %.1f" % (mid, c.value))
 ck(abs(mid - c.value) < 150, "no jump on mid-attack release")
 settle(0.7)
 ck(abs(c.value - 1000) < 60, "still lands on base (%.1f)" % c.value)
+s.all_notes_off()
+settle(0.3)
+
+print("--- curve=2 release must be a DECAY, not a mirrored attack -------")
+# The one shape the software tiers can only check arithmetically. Note this
+# runs at fenv_curve=2 on purpose: at curve=1 the correct and the broken
+# shapes are identical, which is how a mirrored-attack release once shipped.
+#   release(t) = V * (1 - s(t)), s = 1-(1-t)^2  =>  V*(1-t)^2
+#   at halfway: 0.25 of the envelope's height. The old s = t^2 gave 0.75.
+s.load_patch(Patch(filt_type="LPF", filt_f=1000, filt_q=1.2, fenv_amount=3000,
+                   fenv_attack=0.1, fenv_release=1.0, fenv_curve=2,
+                   amp_env=[0.01, 0.1, 0.8, 3.0]))
+s.note_on(60, velocity=127)
+settle(0.5)                       # well past the 0.1s attack, sitting at depth
+e = s._fenvs[60]
+v_start = e.value
+s.note_off(60)
+settle(0.5)                       # halfway through a 1.0s release
+half = e.value
+frac = half / v_start
+print("      envelope %.1f -> %.1f at halfway (%.2f of its height)"
+      % (v_start, half, frac))
+ck(frac < 0.45,
+   "a decay must be well past half by halfway, got %.2f -- above 0.5 means "
+   "the envelope hangs at the top and then plunges" % frac)
+ck(0.10 < frac < 0.42, "want ~0.25 for curve=2, got %.2f" % frac)
+settle(0.8)
+ck(e.value < 0.06 * v_start,
+   "and it must reach the floor by the end (%.1f of %.1f)" % (e.value, v_start))
 s.all_notes_off()
 settle(0.3)
 

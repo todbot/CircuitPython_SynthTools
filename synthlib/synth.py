@@ -101,14 +101,39 @@ class Synth:
         # land in ONE per-voice node. Every knob in there is a shared block
         # nested inside it, so each stays a single write no matter how many
         # voices are sounding -- including voices already in release.
-        self._filt_lfo = synthio.LFO(rate=0.5, scale=0.0)
+        #
+        # Every one of the three modulations is ADDITIVE and one-sided:
+        # filt_f is the floor and they open upward from it. synthio's LFO
+        # outputs `waveform[idx] * scale + offset` and its default waveform
+        # is a triangle centred on zero, so scale ALONE would swing
+        # +/-amount about filt_f and push the bottom half into the
+        # FILT_F_MIN clamp. Setting scale and offset both to amount/2 shifts
+        # the whole swing up into 0..amount -- see filt_lfo_amount below.
+        self._filt_lfo = synthio.LFO(rate=0.5, scale=0.0, offset=0.0)
         self._filt_sum = sum3(self._filt_f_blk, self._filt_lfo)
         self._filt_base = clamp(self._filt_sum, self.FILT_F_MIN,
                                 self.FILT_F_MAX)
-        # keep both LFOs ticking (and phase-continuous) even with no notes
-        # held -- an unattached LFO never updates at all
+        # Anything not reachable from a sounding Note has to be rooted here
+        # or synthio never updates it -- and that applies to Math blocks,
+        # not just LFOs.
+        #
+        # The LFOs are the obvious case: unattached, they do not advance, so
+        # vibrato and the filter sweep would jump phase at every note-on.
+        #
+        # `_filt_base` and `_bend` are the non-obvious one. Both are only
+        # reachable through a voice, so with nothing sounding they freeze --
+        # and on a freshly built Synth they have never been evaluated at
+        # all. Measured on hardware: the first note-on after construction
+        # read its cutoff as 0.0 Hz (a filter slammed shut for a block, i.e.
+        # a click), and later notes after a silence read a stale cutoff
+        # frozen at wherever the LFO was when the last voice died. Rooting
+        # them here makes the shared half of the graph always-live, so a
+        # note-on inherits a correct cutoff and bend on its very first
+        # update. Costs two list entries.
         synthesizer.blocks.append(self._vib_lfo)
         synthesizer.blocks.append(self._filt_lfo)
+        synthesizer.blocks.append(self._filt_base)
+        synthesizer.blocks.append(self._bend)
         # The envelope is a modulation SOURCE: it produces 0 -> amount and
         # knows nothing about filters. Created once and never replaced --
         # sounding voices hold references to its buffer and blocks.
@@ -150,7 +175,9 @@ class Synth:
         self._filt_vel_blk.a = p.filt_vel
         self._fenv_vel_blk.a = p.fenv_vel
         self._filt_lfo.rate = p.filt_lfo_rate
-        self._filt_lfo.scale = p.filt_lfo_amount
+        # via the property: the amount is a half-swing plus a matching
+        # offset, and writing .scale alone here would leave a stale offset
+        self.filt_lfo_amount = p.filt_lfo_amount
         self._vib_lfo.rate = p.vib_rate
         self._vib_lfo.scale = p.vib_depth
         # written into the existing envelope, never a new one, and in one
@@ -170,7 +197,7 @@ class Synth:
         p.filt_vel = self._filt_vel_blk.a
         p.fenv_vel = self._fenv_vel_blk.a
         p.filt_lfo_rate = self._filt_lfo.rate
-        p.filt_lfo_amount = self._filt_lfo.scale
+        p.filt_lfo_amount = self.filt_lfo_amount   # undoes the half-swing
         p.vib_rate = self._vib_lfo.rate
         p.vib_depth = self._vib_lfo.scale
         p.fenv_amount = self._fenv.amount
@@ -411,13 +438,29 @@ class Synth:
 
     @property
     def filt_lfo_amount(self):
-        return self._filt_lfo.scale
+        return self._filt_lfo.scale * 2.0    # stored as half-swing, see below
 
     @filt_lfo_amount.setter
     def filt_lfo_amount(self, v):
-        # Hz of swing, bipolar. The LFO sits in the SHARED half of the bus,
-        # so this reaches every voice -- there is no per-voice copy of it.
-        self._filt_lfo.scale = v
+        """Hz ADDED above filt_f: the cutoff swings 0..v, never below it.
+
+        synthio's LFO is `waveform[idx] * scale + offset`, and the default
+        waveform is a triangle centred on zero, so `scale` on its own is a
+        HALF-swing about zero. Writing scale and offset to the same v/2
+        recentres it: -v/2..+v/2 shifted up by v/2 is 0..v. This is the
+        min/max-to-midpoint/range conversion from README-2-Modulation.md,
+        with lmin fixed at 0.
+
+        Doing it this way rather than with a custom unipolar waveform keeps
+        the LFO on synthio's internal 16-bit resolution -- a hand-built
+        64-sample buffer would be measurably steppier.
+
+        Two writes, but both land on the ONE shared LFO, so this is still
+        O(1) in polyphony: there is no per-voice copy to walk.
+        """
+        half = v * 0.5
+        self._filt_lfo.scale = half
+        self._filt_lfo.offset = half
 
     # --- filter envelope params -----------------------------------------
     # Thin delegates onto self._fenv, which owns the blocks and buffers.

@@ -17,6 +17,15 @@
 # at every note-off. Mutating the buffer's contents in place is fine, and
 # is documented synthio behaviour.
 #
+# One consequence is easy to get wrong. Release replays the SAME rising
+# buffer forward, so its output is `V * (1 - s(t))` -- it INVERTS whatever
+# curvature s has. A buffer holding the obvious t^curve therefore makes the
+# release hang near the top and then fall off a cliff (75% of its height
+# still left at the halfway point, for curve=2): a mirrored attack, not a
+# decay. The buffer holds 1-(1-t)^curve instead, which comes back out of
+# that inversion as V*(1-t)^curve. Attack and release curvature are linked
+# as a result -- one buffer, one exponent. See fill_env_rise() in waves.py.
+#
 # --- why this is bigger than the tutorial's version -------------------
 #
 # todsynth/ahr_envelope.py in the synthio tutorial is the same
@@ -38,7 +47,7 @@
 # including ones already in release -- with a SINGLE write. That is the
 # only reason for the extra indirection. The shared buffer also buys
 # arbitrary integer curve exponents for free, where the tutorial's
-# PRODUCT(lerp, lerp, 1) costs one Math per voice and only gives squared.
+# PRODUCT(lerp, lerp, 1) costs one Math per voice and only gives one curve.
 
 import synthio
 

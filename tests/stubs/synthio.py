@@ -79,7 +79,16 @@ class LFO:
     def _sample(self):
         w = self.waveform
         if w is None or len(w) == 0:
-            return 0.0
+            # Real synthio uses a zero-centred triangle when waveform is
+            # None: 0 -> +1 -> 0 -> -1 -> 0. Returning a flat 0.0 here (as
+            # this stub used to) makes every default-waveform LFO look dead
+            # and silently defeats any test of scale/offset arithmetic.
+            p = self.phase % 1.0
+            if p < 0.25:
+                return p * 4.0
+            if p < 0.75:
+                return 2.0 - p * 4.0
+            return p * 4.0 - 4.0
         i = int(self.phase * (len(w) - 1))
         return w[i] / 32767.0
 

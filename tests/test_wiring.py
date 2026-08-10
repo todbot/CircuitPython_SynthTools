@@ -86,6 +86,15 @@ ck(s._vib_lfo in sio.blocks,
    "the vibrato LFO must be appended to synth.blocks or it never ticks")
 ck(s._filt_lfo in sio.blocks,
    "the filter LFO must be appended to synth.blocks or it never ticks")
+# Math blocks need rooting too, not just LFOs. _filt_base and _bend are only
+# reachable through a voice, so with nothing sounding they freeze -- and on a
+# fresh Synth they have never been evaluated. Measured on hardware: without
+# this the first note-on read its cutoff as 0.0 Hz.
+ck(s._filt_base in sio.blocks,
+   "the shared cutoff base must be rooted in synth.blocks, or the first "
+   "note-on after silence inherits a stale (or never-computed) cutoff")
+ck(s._bend in sio.blocks,
+   "the shared bend graph must be rooted in synth.blocks for the same reason")
 
 # --- the shared half of the cutoff bus -----------------------------------
 ck(s._filt_sum.a is s._filt_f_blk, "the bus must sum the shared filt_f block")
@@ -93,10 +102,46 @@ ck(s._filt_sum.b is s._filt_lfo, "...and the shared filter LFO")
 ck(s._filt_base.operation == "MID", "the shared base must be clamped")
 ck(s._filt_base.a is s._filt_sum, "the clamp must wrap the sum")
 s.filt_lfo_amount = 1500
-ck(s._filt_lfo.scale == 1500,
-   "filt_lfo_amount must be one write into the shared LFO's scale")
 s.filt_lfo_rate = 3.0
 ck(s._filt_lfo.rate == 3.0, "filt_lfo_rate must be one write")
+
+# The LFO must be ADDITIVE: filt_f is the floor and the LFO opens upward,
+# the same convention as filt_vel. synthio's LFO is
+# `waveform[idx] * scale + offset` over a zero-centred default triangle, so
+# scale ALONE would swing +/-amount about filt_f and push the bottom half
+# into the FILT_F_MIN clamp. scale == offset == amount/2 recentres it.
+ck(abs(s._filt_lfo.scale - 750) < 1e-6,
+   "amount must be stored as a half-swing in scale, got %r" % s._filt_lfo.scale)
+ck(abs(s._filt_lfo.offset - 750) < 1e-6,
+   "...and matched by an equal offset, or the swing stays centred on filt_f "
+   "(got %r)" % s._filt_lfo.offset)
+ck(abs(s.filt_lfo_amount - 1500) < 1e-6,
+   "the getter must undo the half-swing, got %r" % s.filt_lfo_amount)
+# Sweep the phase rather than assuming where the peak sits: the buffer's
+# peak is at index 32 of 64, but the stub maps phase 0.5 to int(0.5*63) = 31,
+# so a spot check at 0.5 reads 96.9% and proves nothing useful either way.
+lfo_lo = lfo_hi = None
+base_lo = base_hi = None
+for _i in range(65):
+    s._filt_lfo.phase = _i / 64.0
+    v, b = s._filt_lfo.value, s._filt_base.value
+    lfo_lo = v if lfo_lo is None else min(lfo_lo, v)
+    lfo_hi = v if lfo_hi is None else max(lfo_hi, v)
+    base_lo = b if base_lo is None else min(base_lo, b)
+    base_hi = b if base_hi is None else max(base_hi, b)
+s._filt_lfo.phase = 0.0
+
+ck(abs(lfo_lo) < 1e-6,
+   "the LFO's floor must be exactly 0 -- it ADDS to filt_f, never subtracts. "
+   "Got %r; a negative floor means the bipolar default waveform is back" % lfo_lo)
+ck(abs(lfo_hi - 1500) < 1.0,
+   "the LFO must reach the full amount at its peak, got %r" % lfo_hi)
+ck(abs(base_lo - s.filt_f) < 1e-6,
+   "filt_f must be the FLOOR of the modulated base, got %r want %r"
+   % (base_lo, s.filt_f))
+ck(abs(base_hi - (s.filt_f + 1500)) < 1.0,
+   "the base must peak at filt_f + amount, got %r" % base_hi)
+
 s.filt_lfo_amount = 0     # the stubs render no DSP; the sweep itself is a
 s.filt_lfo_rate = 0.5     # hardware-tier check
 
@@ -249,11 +294,12 @@ ck(pos.waveform is s._fenv._wave, "sounding voice must still see the shared buff
 cur_shape = vals(s._fenv._wave)
 ck(cur_shape != lin_shape, "the shape must change when fenv_curve changes")
 ck(cur_shape[0] == 0 and cur_shape[-1] == ENV_PEAK, "curved endpoints must hold")
-# the rise now fills the whole buffer, so every interior sample is comparable
-ck(all(c <= lin for c, lin in zip(cur_shape, lin_shape)),
-   "curve=2 must never sit above linear")
-ck(cur_shape[32] < lin_shape[32], "curve=2 must sit below linear mid-rise")
-s.set_param("fenv_curve", 1)
+# The rise fills the whole buffer, so every interior sample is comparable.
+# curve=2 sits ABOVE linear: the buffer holds 1-(1-t)^curve, because the
+# release reruns it as V*(1-s(t)) and so inverts its curvature.
+ck(all(c >= lin for c, lin in zip(cur_shape, lin_shape)),
+   "curve=2 must never sit below linear")
+ck(cur_shape[32] > lin_shape[32], "curve=2 must sit above linear mid-rise")
 
 # --- release: endpoints swap, waveform is NEVER reassigned ---------------
 # synthio.LFO.waveform is read-only on real hardware, so a release that
@@ -270,6 +316,7 @@ except AttributeError:
 wave_before = pos.waveform
 pos.phase = 0.5                      # part-way up the rise
 mid = cutoff.value
+v_start = env.value                  # the envelope's height at note-off
 s.note_off(60)
 ck(pos.waveform is wave_before, "release must NOT reassign the LFO's waveform")
 ck(pos.rate is s._fenv._rate_r, "release must swap to the shared release rate")
@@ -277,11 +324,32 @@ ck(env.b == 0.0, "release must aim the envelope back at zero")
 ck(abs(cutoff.value - mid) < 1e-6,
    "release must start exactly where the attack got to: %r -> %r"
    % (mid, cutoff.value))
+
+# --- the release must be a DECAY, not a mirrored attack ------------------
+# NOTE this section deliberately runs with fenv_curve still at 2. At curve=1
+# the correct and the broken shapes are algebraically identical (1-t == 1-t),
+# so a release only ever tested at curve=1 proves nothing about the shape --
+# which is exactly how the mirrored-attack release shipped.
+#
+# release(t) = V * (1 - s(t)). With s = 1-(1-t)^2 that is V*(1-t)^2:
+# 0.258*V by halfway. With the old s = t^2 it would read 0.758*V -- hanging
+# near the top, then falling off a cliff.
+pos.phase = 0.5
+want = v_start * (1.0 - s._fenv._wave[31] / float(ENV_PEAK))
+ck(abs(env.value - want) < 1e-6,
+   "halfway through the release the envelope must follow the buffer: "
+   "%r want %r" % (env.value, want))
+ck(env.value < 0.5 * v_start,
+   "halfway through the release the envelope must be past half its starting "
+   "height (%r of %r) -- anything above that is a mirrored attack, not a decay"
+   % (env.value, v_start))
+
 pos.phase = 1.0
 ck(abs(cutoff.value - s._filt_base.value) < 1e-6,
    "a fully released voice must sit on the shared base, got %r want %r"
    % (cutoff.value, s._filt_base.value))
 ck(60 not in s.voices and 60 not in s._fenvs, "note_off must drop the voice")
+s.set_param("fenv_curve", 1)
 
 # --- fenv_amount == 0 costs nothing --------------------------------------
 s.fenv_amount = 0

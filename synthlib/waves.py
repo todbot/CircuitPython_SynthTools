@@ -80,7 +80,9 @@ def _curve_ramp(start, stop, n, curve):
     multiply is already proven on ulab, `**` is not.
 
     For start/stop in [0,1] the result stays in [0,1], so scaling by
-    ENV_PEAK cannot leave int16 range.
+    ENV_PEAK cannot leave int16 range. Call it descending (1.0 -> 0) to get
+    (1-t)^curve; ulab has no negative strides, so a descending linspace is
+    the way to reverse a ramp, never a [::-1] slice.
 
     Allocates one array per multiply, so curve > 1 costs curve-1 extra
     temporaries. Fine for a patch load or a switch, not for a knob path."""
@@ -97,27 +99,47 @@ def _clamp_curve(curve):
 
 
 def fill_env_rise(buf, curve=1):
-    """Rise 0 -> ENV_PEAK across the WHOLE buffer.
+    """Rise 0 -> ENV_PEAK across the WHOLE buffer, shaped 1 - (1-t)^curve.
 
-    `curve` is an integer exponent on the rise: 1 = linear, 2 = squared,
-    which starts slow and finishes fast -- the shape the synthio tutorial's
-    PRODUCT(lerp, lerp, 1) produces and calls "exponential". 3+ is steeper.
+    `curve` is an integer exponent: 1 = linear, 2+ = increasingly
+    fast-start, easing into the peak. That shape is chosen for what it does
+    at the OTHER end. The release reruns this same buffer through a
+    CONSTRAINED_LERP with swapped endpoints, i.e. `V * (1 - s(t))`, so
 
-    There is deliberately no hold segment and no falling variant:
-      - the hold is what `once=True` already does after the last sample, so
-        writing a plateau here would only shorten the rise and force the
-        release rate to compensate for it;
-      - the fall re-runs this same shape through a CONSTRAINED_LERP with
-        swapped endpoints, and a second buffer would be unreachable anyway
-        because synthio.LFO.waveform is read-only.
+        s(t) = 1 - (1-t)^curve   =>   release = V * (1-t)^curve
+
+    which is the conventional decay: quick initial drop, long tail. The
+    obvious alternative, s(t) = t^curve, makes the release `V * (1 - t^curve)`
+    -- still at 75% of its value halfway through at curve=2, hanging near the
+    top and then falling off a cliff. A mirrored attack, not a decay.
+
+    NOTE this is a deliberate divergence from the synthio tutorial, whose
+    PRODUCT(lerp, lerp, 1) is t^2, the shape described above. The tutorial
+    keeps attack and release shapes independent, so it can afford t^2 for the
+    rise; sharing one buffer means the release gets the casting vote.
+
+    There is deliberately no hold segment and no second, falling buffer:
+      - the hold is what `once=True` already does after the last sample
+        (measured on device: a one-shot LFO reads 0.9999 at both 0.5s and
+        1.5s after a 0.2s rise), so writing a plateau here would only shorten
+        the rise and force the release rate to compensate for it;
+      - a second buffer is unreachable mid-note anyway, because
+        synthio.LFO.waveform is read-only.
 
     Written IN PLACE, so every voice sharing this array morphs live."""
     curve = _clamp_curve(curve)
     n = len(buf)
     if curve == 1:
-        # integer linspace direct: bit-identical to a plain linear ramp and
-        # one float array cheaper
+        # 1 - (1-t)^1 is just t, so take the integer linspace directly:
+        # bit-identical to a plain linear ramp and one float array cheaper
         buf[:] = np.linspace(0, ENV_PEAK, num=n, dtype=np.int16)
     else:
-        buf[:] = np.array(_curve_ramp(0, 1.0, n, curve) * ENV_PEAK,
-                          dtype=np.int16)
+        # `* -ENV_PEAK + ENV_PEAK`, NOT `ENV_PEAK - arr`: the pure-Python
+        # ulab fallback implements __sub__ but not __rsub__, so
+        # scalar-minus-array raises TypeError on the MicroPython tier.
+        # Array-times-scalar and array-plus-scalar are both fine.
+        # Endpoints stay exact for any curve because linspace pins its last
+        # element: (1-t) is exactly 1.0 at index 0 and exactly 0.0 at the end.
+        buf[:] = np.array(
+            _curve_ramp(1.0, 0.0, n, curve) * (-ENV_PEAK) + ENV_PEAK,
+            dtype=np.int16)

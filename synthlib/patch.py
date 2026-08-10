@@ -28,16 +28,19 @@ class Patch:
         # cutoff = filt_f + filt_lfo + fenv + velocity, summed in one
         # synthio block graph. See synth.py.
         # 1. filt_f above is the base.
-        # 2. cyclic LFO, bipolar Hz around the base
+        # 2. cyclic LFO, additive: filt_f is the floor, the LFO opens upward
         self.filt_lfo_rate = 0.5    # Hz
-        self.filt_lfo_amount = 0    # Hz of swing, +/-; 0 = off
+        self.filt_lfo_amount = 0    # Hz added above filt_f, 0..amount; 0 = off
         # 3. AHR envelope, added to the cutoff in Hz. amount 0 = off (and
         #    costs nothing: no per-voice blocks are created).
         self.fenv_amount = 0      # Hz of cutoff swing; negative sweeps down
         self.fenv_attack = 0.05   # seconds to reach full depth
         self.fenv_release = 0.40  # seconds to fall back to zero
-        # integer exponent on the envelope's rise: 1 = linear,
-        # 2 = squared (slow start, fast finish), 3+ steeper
+        # Integer exponent on the envelope shape: 1 = linear, 2+ increasingly
+        # curved. The attack rises fast and eases into the peak; the release
+        # drops fast and tails off -- the conventional analog feel. Both come
+        # from one shared buffer holding 1-(1-t)^curve, so they are linked:
+        # see fill_env_rise() in waves.py for why the release decides.
         self.fenv_curve = 1
         # 4. Velocity. The units differ on purpose: filt_vel adds to a
         #    cutoff so it is in Hz, fenv_vel scales a depth so it is a

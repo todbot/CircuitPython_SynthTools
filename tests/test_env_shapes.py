@@ -12,6 +12,11 @@ There is only one shape, and it is only a rise:
     with swapped endpoints, so there is no falling buffer either.
 See synthlib/ahr_envelope.py.
 
+Because the release is `V * (1 - s(t))`, it INVERTS whatever curvature the
+buffer has -- so the buffer holds 1-(1-t)^curve, and the release comes out
+as V*(1-t)^curve, a conventional quick-drop-then-tail decay. Several checks
+below assert the "wrong" direction on purpose for that reason.
+
     python3 tests/test_env_shapes.py
     micropython tests/test_env_shapes.py
 """
@@ -77,7 +82,11 @@ for i, want in GOLDEN_LINEAR.items():
     ck(v[i] == want,
        "linear index %d: expected %d, got %d" % (i, want, v[i]))
 
-GOLDEN_SQUARED = {0: 0, 8: 528, 16: 2113, 32: 8453, 48: 19021, 63: ENV_PEAK}
+# The buffer holds 1-(1-t)^curve, NOT t^curve -- see fill_env_rise. So a
+# higher curve rises FASTER off the mark, not slower. That is chosen for what
+# it does to the release, which reruns this shape as V*(1-s(t)) and therefore
+# inverts it into V*(1-t)^curve, a conventional decay.
+GOLDEN_SQUARED = {0: 0, 8: 7793, 16: 14530, 32: 24833, 48: 30909, 63: ENV_PEAK}
 b = env_buffer()
 fill_env_rise(b, 2)
 v = vals(b)
@@ -85,28 +94,44 @@ for i, want in GOLDEN_SQUARED.items():
     ck(v[i] == want,
        "squared index %d: expected %d, got %d" % (i, want, v[i]))
 
-# --- shape: curve=2 is slower off the mark than linear -------------------
+# --- shape: curve=2 is FASTER off the mark than linear -------------------
 lin, sq = env_buffer(), env_buffer()
 fill_env_rise(lin, 1)
 fill_env_rise(sq, 2)
 lv, sv = vals(lin), vals(sq)
-ck(all(sv[i] <= lv[i] for i in range(len(lv))),
-   "squared must be <= linear everywhere")
-ck(sv[len(sv) // 2] < lv[len(lv) // 2] * 0.75,
-   "squared well below linear at midpoint")
+ck(all(sv[i] >= lv[i] for i in range(len(lv))),
+   "squared must be >= linear everywhere")
+ck(sv[len(sv) // 2] > lv[len(lv) // 2] * 1.25,
+   "squared well above linear at midpoint")
+
+# --- the release this implies is a real decay ----------------------------
+# This is the property the shape exists for, so assert it here in numeric
+# form as well as through the block graph in test_wiring.py.
+#   release(t) = V * (1 - s(t))
+for curve, want_half in ((1, 0.5), (2, 0.25), (3, 0.125)):
+    b = env_buffer()
+    fill_env_rise(b, curve)
+    half = 1.0 - vals(b)[len(b) // 2] / float(ENV_PEAK)
+    ck(abs(half - want_half) < 0.02,
+       "curve=%s: release should be ~%.3f of its start by halfway, got %.3f"
+       % (curve, want_half, half))
+    ck(curve == 1 or half < 0.5,
+       "curve=%s: a decay must be past half by halfway -- %.3f means the "
+       "envelope hangs at the top and then plunges" % (curve, half))
 
 # --- steeper curves nest, and the endpoint never drifts ------------------
-# The peak now comes from the ramp's last sample rather than from a plateau
-# fill, so float error at the top of linspace would show up directly.
+# The peak comes from the ramp's last sample rather than from a plateau fill,
+# so float error at the top of linspace would show up directly.
 prev = lv
 for curve in (2, 3, 5):
     b = env_buffer()
     fill_env_rise(b, curve)
     v = vals(b)
+    ck(v[0] == 0, "curve=%s must start exactly at 0, got %d" % (curve, v[0]))
     ck(v[-1] == ENV_PEAK,
        "curve=%s must land exactly on peak, got %d" % (curve, v[-1]))
-    ck(all(v[i] <= prev[i] for i in range(len(v))),
-       "curve=%s must sit at or below the next-shallower curve" % curve)
+    ck(all(v[i] >= prev[i] for i in range(len(v))),
+       "curve=%s must sit at or above the next-shallower curve" % curve)
     prev = v
 
 idx = (0, 16, 32, 48, 63)
