@@ -320,7 +320,11 @@ v_start = env.value                  # the envelope's height at note-off
 s.note_off(60)
 ck(pos.waveform is wave_before, "release must NOT reassign the LFO's waveform")
 ck(pos.rate is s._fenv._rate_r, "release must swap to the shared release rate")
-ck(env.b == 0.0, "release must aim the envelope back at zero")
+ck(env.b is s._fenv._rel_amt,
+   "release must aim at the shared release-amount BLOCK, not a bare 0.0 -- "
+   "that is what removes the rising/falling branch and keeps the target live")
+ck(abs(env.b.value) < 1e-6,
+   "...and for a filter envelope that block holds 0.0, got %r" % env.b.value)
 ck(abs(cutoff.value - mid) < 1e-6,
    "release must start exactly where the attack got to: %r -> %r"
    % (mid, cutoff.value))
@@ -374,6 +378,149 @@ s.note_on(67)
 s.all_notes_off()
 ck(not s.voices, "all_notes_off must clear every voice")
 ck(not s._fenvs, "all_notes_off must clear every filter envelope")
+ck(not s._penvs, "all_notes_off must clear every pitch envelope")
+
+# =====================================================================
+# pitch modulation: vibrato fade-in and the pitch envelope
+# =====================================================================
+
+# --- vib_delay: a fade INSIDE the shared LFO's scale ---------------------
+s.load_patch(Patch(vib_depth=0.01, vib_rate=5.0, vib_delay=1.5))
+ck(s._vib_lfo.scale is not None and hasattr(s._vib_lfo.scale, "operation"),
+   "the vibrato LFO's scale must be a PRODUCT(depth, fade), not a float")
+ck(s._vib_lfo.scale.a is s._vib_depth_blk,
+   "the fade must nest the shared depth block, so vib_depth stays one write")
+ck(s._vib_lfo.scale.b is s._vib_fade, "...and the shared fade ramp")
+ck(abs(s._vib_fade.rate - 1.0 / 1.5) < 1e-6,
+   "vib_delay must set the fade rate to 1/seconds, got %r" % s._vib_fade.rate)
+ck(s._vib_fade.once, "the fade ramp must be one-shot")
+ck(s._vib_fade.waveform is not None,
+   "the fade needs an explicit RAMP waveform -- synthio's default is a "
+   "zero-centred triangle, which would come back down again")
+ck(s.vib_delay == 1.5, "the getter must read live state")
+
+# vib_delay = 0 must need no special case: the ramp just finishes at once
+s.vib_delay = 0.0
+ck(s._vib_fade.rate >= 1000.0,
+   "vib_delay=0 must become an effectively instant ramp, got %r"
+   % s._vib_fade.rate)
+s.vib_delay = 1.5
+
+# depth still reaches a sounding voice with one write
+s._vib_fade.phase = 1.0                  # fade complete
+s.vib_depth = 0.02
+ck(abs(s._vib_lfo.scale.value - 0.02) < 1e-6,
+   "vib_depth must still be one write through the PRODUCT, got %r"
+   % s._vib_lfo.scale.value)
+s._vib_fade.phase = 0.0
+ck(abs(s._vib_lfo.scale.value) < 1e-6,
+   "at the start of the fade the effective depth must be 0, got %r"
+   % s._vib_lfo.scale.value)
+
+# --- the fade retriggers from SILENCE, not on every note-on --------------
+s._vib_fade.retriggered = 0
+s.note_on(60)
+ck(s._vib_fade.retriggered == 1, "the first note from silence must retrigger")
+s.note_on(64)
+ck(s._vib_fade.retriggered == 1,
+   "adding a note to a held chord must NOT restart the fade -- that would "
+   "duck everyone's vibrato back to zero")
+s.note_off(60)
+s.note_on(67)
+ck(s._vib_fade.retriggered == 1,
+   "...still not, while any note is held")
+s.all_notes_off()
+s.note_on(60)
+ck(s._vib_fade.retriggered == 2,
+   "starting again from silence must retrigger")
+s.all_notes_off()
+
+# --- pitch envelope: costs nothing when off ------------------------------
+s.load_patch(Patch(vib_depth=0.01))      # all four penv_* default to 0
+s.note_on(60)
+ck(60 not in s._penvs, "no pitch envelope should be built when both amounts are 0")
+for n in s.voices[60]:
+    ck(n.bend is s._bend,
+       "with no pitch envelope every Note must ride the SHARED bend graph "
+       "directly, allocating nothing per voice")
+s.all_notes_off()
+
+# --- pitch envelope: per voice when on -----------------------------------
+s.load_patch(Patch(penv_amount=0.5, penv_time=0.1,
+                   penv_out_amount=0.25, penv_out_time=0.2))
+s.note_on(60)
+s.note_on(64)
+p60, p64 = s._penvs[60], s._penvs[64]
+ck(p60 is not p64, "each voice must get its OWN pitch envelope")
+ck(p60.c is not p64.c, "...with its own position LFO, so they can be staggered")
+b60 = s.voices[60][0].bend
+ck(b60 is not s._bend, "a voice with a pitch envelope needs its own bend node")
+ck(b60.operation == "SUM", "the per-voice bend must be a SUM")
+ck(b60.a is s._bend, "...nesting the shared bend graph, so vibrato still reaches it")
+ck(b60.b is p60, "...plus this voice's own pitch envelope")
+for n in s.voices[60]:
+    ck(n.bend is b60, "every Note of one voice must share ONE bend node")
+ck(s.voices[64][0].bend is not b60, "a different voice gets a different node")
+
+# --- bend-in shape: amount -> 0, the OPPOSITE of the filter envelope -----
+p60.c.phase = 0.0
+ck(abs(p60.value - 0.5) < 1e-6,
+   "at note-on the pitch envelope must sit at penv_amount, got %r" % p60.value)
+p60.c.phase = 1.0
+ck(abs(p60.value) < 1e-6,
+   "and settle to 0 = true pitch, got %r" % p60.value)
+ck(abs(b60.value - s._bend.value) < 1e-6,
+   "once settled the voice's bend must equal the shared bend")
+
+# --- bend-out on note-off ------------------------------------------------
+p60.c.phase = 1.0
+before = p60.value
+s.note_off(60)
+ck(p60.b is s._penv._rel_amt,
+   "release must aim at the shared out-amount BLOCK, so penv_out_amount "
+   "stays live for a voice that is already drifting")
+p60.c.phase = 0.0
+ck(abs(p60.value - before) < 1e-6,
+   "the bend-out must start exactly where the note left off: %r -> %r"
+   % (before, p60.value))
+p60.c.phase = 1.0
+ck(abs(p60.value - 0.25) < 1e-6,
+   "and land on penv_out_amount, got %r" % p60.value)
+s.all_notes_off()
+
+# --- out-only patch: the node must still be built at press ---------------
+s.load_patch(Patch(penv_amount=0.0, penv_out_amount=0.3, penv_out_time=0.2))
+s.note_on(60)
+ck(60 in s._penvs,
+   "an out-only pitch envelope must still build its node at note-on -- "
+   "note-off has nothing to re-aim otherwise")
+ck(abs(s._penvs[60].value) < 1e-6,
+   "...and read 0 during the note, got %r" % s._penvs[60].value)
+s.note_off(60)
+s.all_notes_off()
+
+# --- identity across a patch reload --------------------------------------
+penv_obj, vib_fade, vib_lfo, bend = s._penv, s._vib_fade, s._vib_lfo, s._bend
+amt_blk, rel_blk = s._penv._amt, s._penv._rel_amt
+s.load_patch(Patch(penv_amount=0.2, penv_out_amount=0.1, vib_delay=0.5))
+ck(s._penv is penv_obj, "the pitch envelope must be written, never replaced")
+ck(s._penv._amt is amt_blk and s._penv._rel_amt is rel_blk,
+   "its blocks must survive a patch reload")
+ck(s._vib_fade is vib_fade and s._vib_lfo is vib_lfo,
+   "the vibrato objects must survive a patch reload")
+ck(s._bend is bend, "the shared bend graph must survive a patch reload")
+ck(abs(s._penv.amount - 0.2) < 1e-6, "reload must push penv_amount through")
+ck(abs(s._penv.release_amount - 0.1) < 1e-6, "...and penv_out_amount")
+ck(abs(s._vib_fade.rate - 1.0 / 0.5) < 1e-6, "...and vib_delay")
+
+# --- the two envelopes are independent instances -------------------------
+ck(s._penv is not s._fenv, "pitch and filter envelopes are separate instances")
+ck(s._penv._wave is not s._fenv._wave,
+   "each envelope owns its shape buffer, so penv curvature is independent "
+   "of fenv_curve")
+ck(s._penv._falling and not s._fenv._falling,
+   "the pitch envelope falls, the filter envelope rises")
+s.all_notes_off()
 
 # =====================================================================
 # velocity -> filter cutoff, and velocity -> envelope depth

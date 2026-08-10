@@ -311,17 +311,123 @@ s.save_patch()
 ck(pat.filt_f == 2500 and pat.amp_env[0] == 0.4 and pat.wave == "SQU",
    "save_patch() must commit everything, subclass params included")
 
-print("--- AHREnvelope standalone (what a pitch env would need) ---------")
+print("--- vib_delay: does the fade tick nested inside LFO.scale? -------")
+# _vib_fade is NOT rooted in synth.blocks -- it is nested in _vib_lfo.scale,
+# and _vib_lfo IS rooted. Unattached Math blocks were found to freeze, so
+# this checks the nesting really is enough.
+s.load_patch(Patch(filt_type="LPF", filt_f=2000, fenv_amount=0,
+                   vib_depth=0.02, vib_rate=5.0, vib_delay=1.0,
+                   amp_env=[0.01, 0.1, 0.9, 0.2]))
+s.note_on(60, velocity=127)
+settle(0.05)
+scale_blk = s._vib_lfo.scale
+readings = []
+for _ in range(7):
+    readings.append(scale_blk.value)
+    settle(0.2)
+print("      effective vib depth over 1.4s: "
+      + " ".join("%.4f" % v for v in readings))
+ck(readings[0] < 0.004, "vibrato must start at ~0 depth, got %.4f" % readings[0])
+ck(readings[-1] > 0.016,
+   "...and reach vib_depth once the fade completes, got %.4f" % readings[-1])
+ck(all(readings[i] <= readings[i + 1] + 0.001 for i in range(len(readings) - 1)),
+   "the fade must rise monotonically -- if it is flat at 0 the nested ramp "
+   "is not ticking and _vib_fade needs rooting in synth.blocks")
+s.all_notes_off()
+settle(0.3)
+
+print("--- vib fade retriggers from SILENCE, not per note ---------------")
+s.note_on(60, velocity=127)
+settle(0.6)                       # part-way up the fade
+mid = s._vib_lfo.scale.value
+s.note_on(64, velocity=127)       # add to the held chord
+settle(0.05)
+after = s._vib_lfo.scale.value
+print("      depth %.4f before adding a note, %.4f after" % (mid, after))
+ck(after >= mid - 0.001,
+   "adding a note to a held chord must not duck the vibrato back to 0")
+s.all_notes_off()
+settle(0.4)
+s.note_on(60, velocity=127)
+settle(0.05)
+fresh = s._vib_lfo.scale.value
+print("      after silence, a new note restarts the fade at %.4f" % fresh)
+ck(fresh < 0.004, "starting from silence must restart the fade, got %.4f" % fresh)
+s.all_notes_off()
+settle(0.3)
+
+print("--- pitch envelope: bends INTO the note, then OUT of it -----------")
+s.load_patch(Patch(filt_type="LPF", filt_f=3000, fenv_amount=0, vib_depth=0.0,
+                   penv_amount=0.5, penv_time=0.4,
+                   penv_out_amount=0.25, penv_out_time=0.4,
+                   amp_env=[0.01, 0.1, 0.9, 1.5]))
+s.note_on(60, velocity=127)
+settle(0.03)
+penv = s._penvs[60]
+bend = s.voices[60][0].bend
+ck(bend is not s._bend, "a voice with a pitch envelope gets its own bend node")
+start = penv.value
+settle(0.25)
+partway = penv.value
+settle(0.35)
+settled = penv.value
+print("      bend %.3f -> %.3f -> %.3f  (want 0.5 -> ~0.25 -> 0)"
+      % (start, partway, settled))
+ck(start > 0.42, "must start at penv_amount, got %.3f" % start)
+ck(partway < start - 0.1, "must be falling toward pitch, got %.3f" % partway)
+ck(abs(settled) < 0.03, "must settle on true pitch, got %.3f" % settled)
+
+out_start = penv.value
+s.note_off(60)
+settle(0.03)
+ck(abs(penv.value - out_start) < 0.05,
+   "the bend-out must start where the note left off: %.3f -> %.3f"
+   % (out_start, penv.value))
+settle(0.6)
+print("      after note-off, drifted to %.3f (want 0.25)" % penv.value)
+ck(abs(penv.value - 0.25) < 0.04,
+   "must drift to penv_out_amount, got %.3f" % penv.value)
+s.all_notes_off()
+settle(0.3)
+
+print("--- pitch envelope costs nothing when off ------------------------")
+s.load_patch(Patch(filt_type="LPF", filt_f=3000, fenv_amount=0))
+s.note_on(60, velocity=127)
+settle(0.05)
+ck(60 not in s._penvs, "both amounts 0 must build no pitch envelope")
+ck(s.voices[60][0].bend is s._bend,
+   "...and every Note rides the shared bend graph directly")
+s.all_notes_off()
+settle(0.3)
+
+print("--- AHREnvelope standalone, both directions ----------------------")
 solo = AHREnvelope(attack=0.3, release=0.3, amount=1.0)
 senv = solo.make()
 engine.blocks.append(senv)
 settle(0.7)
-print("      standalone value = %.3f (amount 1.0)" % senv.value)
+print("      rising:  %.3f (amount 1.0)" % senv.value)
 ck(senv.value > 0.9, "standalone envelope rose to its amount")
 solo.start_release(senv)
 settle(0.5)
 ck(senv.value < 0.15, "standalone envelope released to zero (%.3f)" % senv.value)
 engine.blocks.remove(senv)
+
+# the same class the other way up, which is all a pitch envelope is
+fall = AHREnvelope(attack=0.3, release=0.3, amount=1.0,
+                   falling=True, release_amount=0.5)
+fenv2 = fall.make()
+engine.blocks.append(fenv2)
+settle(0.05)
+print("      falling: starts %.3f" % fenv2.value)
+ck(fenv2.value > 0.9, "a falling envelope must START at its amount")
+settle(0.6)
+ck(abs(fenv2.value) < 0.06, "...and settle to 0 (%.3f)" % fenv2.value)
+fall.start_release(fenv2)
+settle(0.6)
+print("      falling: released to %.3f (want 0.5)" % fenv2.value)
+ck(abs(fenv2.value - 0.5) < 0.06,
+   "...then release to release_amount, not to 0 (%.3f)" % fenv2.value)
+engine.blocks.remove(fenv2)
 
 mixer.voice[0].level = 0.25
 print()

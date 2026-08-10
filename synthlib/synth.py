@@ -37,6 +37,7 @@ import synthio
 
 from .ahr_envelope import AHREnvelope
 from .blocks import scalar_block, sum3, product, lerp, clamp
+from .waves import ramp_wave
 
 FILTER_MODES = {
     "LPF": synthio.FilterMode.LOW_PASS,
@@ -50,7 +51,8 @@ class Synth:
     # names settable via set_param(); also what a UI can enumerate
     _PARAMS = ("filt_f", "filt_q", "filt_type", "amp_env",
                "attack_time", "decay_time", "sustain_level", "release_time",
-               "vib_depth", "vib_rate",
+               "vib_depth", "vib_rate", "vib_delay",
+               "penv_amount", "penv_time", "penv_out_amount", "penv_out_time",
                "filt_lfo_rate", "filt_lfo_amount",
                "fenv_amount", "fenv_attack", "fenv_release", "fenv_curve",
                "filt_vel", "fenv_vel")
@@ -79,13 +81,25 @@ class Synth:
         self._filt_q_blk = scalar_block(1.0)
         self._filt_vel_blk = scalar_block(0.0)
         self._fenv_vel_blk = scalar_block(0.0)
-        # Bend graph, shared by every voice:
-        #   vib_lfo (depth=scale) --\
-        #                            SUM --> note.bend
-        #   bend_blk (wheel) -------/
-        # Both inputs are global, so one Math object serves all notes and
-        # both vibrato depth and pitch bend become single scalar writes.
-        self._vib_lfo = synthio.LFO(rate=5.0, scale=0.0)
+        # --- the bend graph ------------------------------------------
+        #
+        #   SHARED:  bend = SUM(vib_lfo, bend_blk)
+        #                     vib_lfo.scale = PRODUCT(vib_depth, vib_fade)
+        #   VOICE:   note.bend = SUM(bend, penv)   -- only when a pitch
+        #                                             envelope exists
+        #
+        # The vibrato fade-in lives INSIDE the LFO's scale rather than on
+        # the bend path, because LFO.scale is a BlockInput. That keeps the
+        # whole of vib_delay in the shared half: nothing per voice, and
+        # vib_depth stays one write into its own block.
+        self._vib_depth_blk = scalar_block(0.0)
+        # A one-shot 0 -> 1 ramp. rate = 1/vib_delay, so vib_delay = 0 needs
+        # no special case at all -- the ramp just finishes in a millisecond.
+        # The graph stays static, which is what the identity rule wants.
+        self._vib_fade = synthio.LFO(waveform=ramp_wave(), rate=1000.0,
+                                     once=True)
+        self._vib_lfo = synthio.LFO(
+            rate=5.0, scale=product(self._vib_depth_blk, self._vib_fade))
         self._bend_blk = scalar_block(0.0)
         self._bend = sum3(self._vib_lfo, self._bend_blk)
         # --- the filter cutoff modulation bus ------------------------
@@ -139,14 +153,26 @@ class Synth:
         # sounding voices hold references to its buffer and blocks.
         self._fenv = AHREnvelope()
         self._fenvs = {}          # midi_note -> env block, for held notes
+        # The pitch envelope is the SAME class, falling instead of rising:
+        # it starts at penv_amount and settles to 0 (true pitch), then on
+        # note-off drifts on to penv_out_amount. Its own instance, so its
+        # shape buffer and rates are independent of the filter's.
+        self._penv = AHREnvelope(falling=True)
+        self._penvs = {}          # midi_note -> pitch env block
         # "voice under construction" temporaries, set by note_on around the
-        # call to _make_notes so _make_filter can pick them up
+        # call to _make_notes so _make_filter and the subclasses can pick
+        # them up
         self._fenv_cur = None
         self._cutoff_cur = None
+        self._penv_cur = None
+        self._bend_cur = None
         # live mirrors of patch values that have nowhere else to live
         self._filt_type = None
         self._filt_mode = None
         self._amp_env = [0.01, 0.10, 0.8, 0.35]
+        # a mirror rather than 1/_vib_fade.rate, to avoid a reciprocal
+        # round-trip through save/load
+        self._vib_delay = 0.0
         self._env = self._make_env()
         if patch:
             self.load_patch(patch)
@@ -179,11 +205,15 @@ class Synth:
         # offset, and writing .scale alone here would leave a stale offset
         self.filt_lfo_amount = p.filt_lfo_amount
         self._vib_lfo.rate = p.vib_rate
-        self._vib_lfo.scale = p.vib_depth
-        # written into the existing envelope, never a new one, and in one
-        # call so the shape is rebuilt once rather than per parameter
+        self._vib_depth_blk.a = p.vib_depth
+        self.vib_delay = p.vib_delay          # via the property: sets a rate
+        # written into the existing envelopes, never new ones, and in one
+        # call each so the shape is rebuilt once rather than per parameter
         self._fenv.configure(p.fenv_attack, p.fenv_release,
                              p.fenv_amount, p.fenv_curve)
+        # curve 1: penv_curve is not a patch field, though the class takes one
+        self._penv.configure(p.penv_time, p.penv_out_time,
+                             p.penv_amount, 1, p.penv_out_amount)
 
     def _decompile(self):
         """Push live state back into self.patch. The opposite of
@@ -199,7 +229,12 @@ class Synth:
         p.filt_lfo_rate = self._filt_lfo.rate
         p.filt_lfo_amount = self.filt_lfo_amount   # undoes the half-swing
         p.vib_rate = self._vib_lfo.rate
-        p.vib_depth = self._vib_lfo.scale
+        p.vib_depth = self._vib_depth_blk.a
+        p.vib_delay = self._vib_delay
+        p.penv_amount = self._penv.amount
+        p.penv_time = self._penv.attack
+        p.penv_out_amount = self._penv.release_amount
+        p.penv_out_time = self._penv.release
         p.fenv_amount = self._fenv.amount
         p.fenv_attack = self._fenv.attack
         p.fenv_release = self._fenv.release
@@ -265,6 +300,21 @@ class Synth:
                           vel_hz if vel_hz is not None else 0.0),
                      self.FILT_F_MIN, self.FILT_F_MAX)
 
+    def _voice_bend(self):
+        """This voice's bend input, shared by all its Notes.
+
+        Returns the SHARED bend graph unchanged when no pitch envelope is
+        in play, so the ordinary case allocates nothing and vibrato and the
+        pitch wheel keep reaching every voice with one write. When there is
+        one, the shared graph is still nested inside, so that stays true.
+
+        Only meaningful during note_on: it reads the temporaries note_on
+        sets up around _make_notes.
+        """
+        if self._penv_cur is None:
+            return self._bend
+        return sum3(self._bend, self._penv_cur)
+
     def _make_filter(self):
         """Per-note Biquad (filters hold state, so they cannot be shared).
         Every Note of one voice shares one cutoff graph.
@@ -286,27 +336,42 @@ class Synth:
     def note_on(self, midi_note, velocity=127):
         if midi_note in self.voices:
             self.note_off(midi_note)
-        # The envelope is an INPUT to the cutoff, so it has to exist first.
-        # Both are built before _make_notes so every Note of this voice
-        # shares one cutoff graph.
+        # Restart the vibrato fade only when starting from silence, so
+        # adding a note to a held chord does not duck everyone's vibrato
+        # back to zero. After the steal above, so a mono retrigger still
+        # counts as starting from silence.
+        if not self.voices:
+            self._vib_fade.retrigger()
+        # Each envelope is an INPUT to the thing it modulates, so both have
+        # to exist first. All four temporaries are set before _make_notes so
+        # every Note of this voice shares one cutoff and one bend graph.
         if self._filt_mode is not None:
             self._fenv_cur = self._fenv.make(self._voice_fenv_gain(velocity))
         self._cutoff_cur = self._voice_cutoff(velocity)
+        self._penv_cur = self._penv.make()
+        self._bend_cur = self._voice_bend()
         notes = self._make_notes(midi_note, velocity)
         if self._fenv_cur is not None:
             self._fenvs[midi_note] = self._fenv_cur
+        if self._penv_cur is not None:
+            self._penvs[midi_note] = self._penv_cur
         self._fenv_cur = None
         self._cutoff_cur = None
+        self._penv_cur = None
+        self._bend_cur = None
         self.voices[midi_note] = notes
         self.synthio.press(notes)
 
     def note_off(self, midi_note):
         notes = self.voices.pop(midi_note, None)
         if notes:
+            # the Note keeps these alive while it rings out
             env = self._fenvs.pop(midi_note, None)
             if env is not None:
-                # the Note keeps it alive while it rings out
                 self._fenv.start_release(env)
+            penv = self._penvs.pop(midi_note, None)
+            if penv is not None:
+                self._penv.start_release(penv)
             self.synthio.release(notes)
 
     def all_notes_off(self):
@@ -412,11 +477,13 @@ class Synth:
 
     @property
     def vib_depth(self):
-        return self._vib_lfo.scale
+        return self._vib_depth_blk.a
 
     @vib_depth.setter
     def vib_depth(self, v):
-        self._vib_lfo.scale = v         # O(1), reaches every sounding voice
+        # into its own block rather than onto LFO.scale, because scale now
+        # holds PRODUCT(depth, fade). Still one write, still O(1).
+        self._vib_depth_blk.a = v
 
     @property
     def vib_rate(self):
@@ -425,6 +492,60 @@ class Synth:
     @vib_rate.setter
     def vib_rate(self, v):
         self._vib_lfo.rate = v
+
+    @property
+    def vib_delay(self):
+        return self._vib_delay
+
+    @vib_delay.setter
+    def vib_delay(self, v):
+        """Seconds for the vibrato to fade in from nothing, restarted
+        whenever playing begins from silence.
+
+        Only a rate on the shared fade ramp, so it is cheap on a knob. It
+        takes effect at the NEXT retrigger, not mid-fade.
+        """
+        self._vib_delay = v
+        self._vib_fade.rate = 1.0 / max(v, 0.001)
+
+    # --- pitch envelope --------------------------------------------------
+    # Thin delegates onto self._penv, which is an AHREnvelope running
+    # falling: penv_amount -> 0 on the way in, then on to penv_out_amount
+    # on the way out. Amounts are bend units, 1.0 = one octave.
+    # Like fenv_amount, raising either amount from 0 only affects NEW notes,
+    # because at 0 no per-voice node is built to write into.
+
+    @property
+    def penv_amount(self):
+        return self._penv.amount
+
+    @penv_amount.setter
+    def penv_amount(self, v):
+        self._penv.amount = v
+
+    @property
+    def penv_time(self):
+        return self._penv.attack
+
+    @penv_time.setter
+    def penv_time(self, v):
+        self._penv.attack = v
+
+    @property
+    def penv_out_amount(self):
+        return self._penv.release_amount
+
+    @penv_out_amount.setter
+    def penv_out_amount(self, v):
+        self._penv.release_amount = v
+
+    @property
+    def penv_out_time(self):
+        return self._penv.release
+
+    @penv_out_time.setter
+    def penv_out_time(self, v):
+        self._penv.release = v
 
     # --- filter LFO: shared, so both are one write ----------------------
 

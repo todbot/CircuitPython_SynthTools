@@ -90,7 +90,8 @@ class WavetableSynth(Synth):
         f = synthio.midi_to_hz(midi_note)
         return (synthio.Note(f, waveform=self._wave, envelope=self._env,
                              amplitude=velocity / 127,
-                             filter=self._make_filter(), bend=self._bend),)
+                             filter=self._make_filter(),
+                             bend=self._bend_cur),)
 
     @property
     def wave_pos(self):

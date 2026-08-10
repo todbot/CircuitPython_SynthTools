@@ -31,11 +31,11 @@ class SubtractiveSynth(Synth):
         amp = velocity / 127
         n1 = synthio.Note(f, waveform=self._wave, envelope=self._env,
                           amplitude=amp, filter=self._make_filter(),
-                          bend=self._bend)
+                          bend=self._bend_cur)
         if self._detune and self._detune != 1.0:
             n2 = synthio.Note(f * self._detune, waveform=self._wave,
                               envelope=self._env, amplitude=amp * 0.6,
-                              filter=self._make_filter(), bend=self._bend)
+                              filter=self._make_filter(), bend=self._bend_cur)
             return (n1, n2)
         return (n1,)
 

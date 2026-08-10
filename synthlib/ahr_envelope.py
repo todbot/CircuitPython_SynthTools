@@ -57,17 +57,31 @@ from .waves import env_buffer, fill_env_rise
 
 class AHREnvelope:
     """Shared-block attack/release envelope. One instance owns the shape
-    buffer, the rate blocks and the depth block; make() hands out one small
+    buffer, the rate blocks and the depth blocks; make() hands out one small
     block graph per voice that reads them.
 
-    Destination-agnostic on purpose -- the output is a plain 0 -> amount
-    signal, so the same class drives a filter cutoff (add it to the cutoff
-    bus) or, later, a pitch envelope (add it to the bend graph)."""
+    Both DESTINATION- and DIRECTION-agnostic, so one class covers every
+    one-shot envelope in the library:
 
-    def __init__(self, attack=0.05, release=0.4, amount=0.0, curve=1):
+        falling=False   0 -> amount, release back to release_amount
+        falling=True    amount -> 0, release on to release_amount
+
+    The filter envelope is the rising case added to a cutoff bus; a pitch
+    envelope is the falling one added to a bend graph -- it starts off-pitch
+    and settles, then on note-off drifts on to release_amount. Nothing here
+    knows which.
+
+    The two differ ONLY in make()'s endpoints. Everything else -- the shared
+    amount block, the shared rates, the in-place shape buffer, the
+    re-aim-the-endpoints release -- is identical, which is why this is one
+    class with a flag rather than two classes."""
+
+    def __init__(self, attack=0.05, release=0.4, amount=0.0, curve=1,
+                 falling=False, release_amount=0.0):
         self._attack = attack
         self._release = release
         self._curve = curve
+        self._falling = falling
         # Created ONCE and never replaced. Sounding voices hold references
         # to all of these, so identity has to survive patch reloads --
         # assigning a new object here would orphan the live ones.
@@ -75,6 +89,10 @@ class AHREnvelope:
         self._rate_a = scalar_block(1.0)
         self._rate_r = scalar_block(1.0)
         self._amt = scalar_block(amount)
+        # Where a release lands. A BLOCK even when it only ever holds 0.0
+        # (the filter case): that removes the special case from
+        # start_release() and keeps the target live for releasing voices.
+        self._rel_amt = scalar_block(release_amount)
         self._refresh_shape()
         self._refresh_rates()
 
@@ -91,13 +109,14 @@ class AHREnvelope:
         self._rate_a.a = 1.0 / max(self._attack, 0.001)
         self._rate_r.a = 1.0 / max(self._release, 0.001)
 
-    def configure(self, attack, release, amount, curve):
+    def configure(self, attack, release, amount, curve, release_amount=0.0):
         """Set everything at once with a single shape rebuild. For patch
         loads; the individual properties are the knob path."""
         self._attack = attack
         self._release = release
         self._curve = curve
         self._amt.a = amount
+        self._rel_amt.a = release_amount
         self._refresh_shape()
         self._refresh_rates()
 
@@ -142,10 +161,21 @@ class AHREnvelope:
         # ones already in release (it stays live inside each voice's depth)
         self._amt.a = v
 
+    @property
+    def release_amount(self):
+        return self._rel_amt.a
+
+    @release_amount.setter
+    def release_amount(self, v):
+        # where a release lands. One write, and because start_release()
+        # parks the BLOCK in env.b rather than a number, it reaches voices
+        # that are already falling.
+        self._rel_amt.a = v
+
     # --- per-voice ------------------------------------------------------
 
     def make(self, gain=1.0):
-        """One voice's envelope, or None when the depth is zero.
+        """One voice's envelope, or None when it would do nothing at all.
 
         Returns the CONSTRAINED_LERP block to add to a destination. It
         carries everything start_release() needs: the position LFO in `c`.
@@ -153,12 +183,15 @@ class AHREnvelope:
         `gain` is a per-voice depth scale -- a plain number, or a block
         (e.g. a velocity LERP) so whatever drives it stays live.
 
-        Returning None when the amount is 0 is what makes the envelope cost
-        literally nothing when switched off. The flip side: a voice pressed
-        while amount was 0 has no envelope at all, so raising it mid-note
-        only affects NEW notes.
+        Returning None is what makes the envelope cost literally nothing
+        when switched off. Note the guard tests BOTH amounts: an envelope
+        that does nothing during the note but drifts somewhere on release
+        (amount 0, release_amount set) still needs its node built at press,
+        because note-off has nothing to re-aim otherwise. The flip side:
+        a voice pressed while both were 0 has no envelope at all, so
+        raising either mid-note only affects NEW notes.
         """
-        if not self._amt.a:
+        if not self._amt.a and not self._rel_amt.a:
             return None
         # A plain 1.0 means "nothing is scaling this", and the voice can use
         # the shared block directly -- one Math lighter in the common case.
@@ -171,6 +204,11 @@ class AHREnvelope:
         else:
             depth = product(self._amt, gain)
         pos = synthio.LFO(waveform=self._wave, rate=self._rate_a, once=True)
+        # The ONLY difference between a filter envelope and a pitch envelope:
+        # which end of the lerp the amount sits at.
+        if self._falling:
+            return synthio.Math(synthio.MathOperation.CONSTRAINED_LERP,
+                                depth, 0.0, pos)
         return synthio.Math(synthio.MathOperation.CONSTRAINED_LERP,
                             0.0, depth, pos)
 
@@ -178,12 +216,16 @@ class AHREnvelope:
         """Send a voice's envelope into release. Call at note-off.
 
         Re-aims the same position LFO instead of swapping its waveform, so
-        the fall starts wherever the attack actually got to and a key lifted
-        mid-attack does not jump to full depth first. Continuity is
-        structural: there is no gain to recompute and no base to restore,
-        because the envelope's floor is simply 0.
+        the fall starts wherever the envelope actually got to and a key
+        lifted mid-attack does not jump to full depth first. Continuity is
+        structural: there is no gain to recompute.
+
+        The target is the shared release-amount BLOCK, not a number, which
+        is what lets it stay live for a voice that is already falling -- and
+        it means the rising and falling cases need no branch here at all,
+        since a filter envelope simply has a block that holds 0.0.
         """
-        env.a = env.value       # fall from here...
-        env.b = 0.0             # ...back to nothing
+        env.a = env.value       # move from here...
+        env.b = self._rel_amt   # ...to wherever the release lands
         env.c.rate = self._rate_r
         env.c.retrigger()

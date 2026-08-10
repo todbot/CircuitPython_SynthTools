@@ -23,7 +23,15 @@ class Patch:
         self.amp_env = [0.01, 0.10, 0.8, 0.35]  # attack, decay, sustain, release
         self.vib_rate = 5.0    # Hz
         self.vib_depth = 0.0   # in bend units: 1.0 = one octave, 0.006 ~ 10 cents
-        self.vib_delay = 0.0   # seconds before vibrato fades in (0 = immediate)
+        self.vib_delay = 0.0   # seconds for vibrato to fade in (0 = immediate)
+        # Pitch envelope, in the same bend units. Bends INTO the note from
+        # penv_amount to true pitch, then on note-off drifts OUT to
+        # penv_out_amount. Both amounts default to 0 = off, and a voice with
+        # both off costs nothing.
+        self.penv_amount = 0.0      # bend at note-on; + starts sharp, - flat
+        self.penv_time = 0.10       # seconds to settle to true pitch
+        self.penv_out_amount = 0.0  # bend drifted to after note-off
+        self.penv_out_time = 0.20   # seconds for that drift
         # --- the four filter-cutoff modulations -----------------------
         # cutoff = filt_f + filt_lfo + fenv + velocity, summed in one
         # synthio block graph. See synth.py.

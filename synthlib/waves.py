@@ -74,6 +74,28 @@ def env_buffer():
     return np.zeros(ENV_SIZE, dtype=np.int16)
 
 
+_ramp = None
+
+
+def ramp_wave():
+    """A cached 0 -> peak ramp, for one-shot LFOs used as a POSITION.
+
+    Two samples is all it takes: synthio interpolates between waveform
+    entries, so (0, ENV_PEAK) with once=True is a clean linear ramp that
+    holds at the top -- the tutorial's idiom for fade-ins and bends.
+
+    Note this is NOT interchangeable with LFO(waveform=None): the default
+    waveform is a zero-centred triangle that would come back down again.
+    A ramp has to be spelled out.
+
+    Read-only and shared by every user, unlike the envelope shape buffers,
+    which are per-instance because they get rewritten in place."""
+    global _ramp
+    if _ramp is None:
+        _ramp = np.array((0, ENV_PEAK), dtype=np.int16)
+    return _ramp
+
+
 def _curve_ramp(start, stop, n, curve):
     """Normalized ramp start -> stop over n points, raised to the integer
     power `curve`. Repeated multiply rather than `**`: elementwise float

@@ -47,18 +47,27 @@ ck(r.wave_file == "/wt.wav" and r.wave_pos == 3.5,
 ck(p.filt_vel == 0, "default filt_vel should be 0 (velocity changes nothing)")
 ck(p.fenv_vel == 0.0, "default fenv_vel should be 0.0")
 ck(p.filt_lfo_amount == 0, "default filt_lfo_amount should be 0 (LFO off)")
+ck(p.vib_delay == 0.0, "default vib_delay should be 0 (vibrato immediate)")
+ck(p.penv_amount == 0.0 and p.penv_out_amount == 0.0,
+   "both pitch-envelope amounts should default to 0 = off")
 ck(not hasattr(p, "fenv_hold"),
    "fenv_hold was retired: with once=True the LFO already holds its last "
    "sample forever, so a hold segment was unreachable")
 
 full = Patch(name="curvy", fenv_curve=3, filt_f=1234, fenv_amount=2500,
              filt_vel=-2000, fenv_vel=0.6,
-             filt_lfo_rate=2.5, filt_lfo_amount=800)
+             filt_lfo_rate=2.5, filt_lfo_amount=800,
+             vib_delay=1.5, penv_amount=-0.4, penv_time=0.08,
+             penv_out_amount=0.25, penv_out_time=0.3)
 back = Patch.from_json(full.to_json())
 for k in ("name", "fenv_curve", "filt_f", "fenv_amount", "detune", "filt_type",
-          "filt_vel", "fenv_vel", "filt_lfo_rate", "filt_lfo_amount"):
+          "filt_vel", "fenv_vel", "filt_lfo_rate", "filt_lfo_amount",
+          "vib_delay", "penv_amount", "penv_time",
+          "penv_out_amount", "penv_out_time"):
     ck(getattr(back, k) == getattr(full, k), "field %r must round-trip" % k)
 ck(back.filt_vel == -2000, "filt_vel is signed: negative must survive")
+ck(back.penv_amount == -0.4,
+   "penv_amount is signed too: negative means bending UP into the note")
 
 # every field added over time must default cleanly on an older patch file
 legacy = Patch.from_json('{"name":"old","filt_f":900}')
@@ -68,6 +77,8 @@ ck(legacy.filt_vel == 0 and legacy.fenv_vel == 0.0,
    "a patch saved before the velocity params existed must default to no response")
 ck(legacy.filt_lfo_amount == 0 and legacy.filt_lfo_rate == 0.5,
    "a patch saved before the filter LFO existed must default to off")
+ck(legacy.penv_amount == 0.0 and legacy.penv_out_amount == 0.0,
+   "a patch saved before the pitch envelope existed must default to off")
 
 # ...and a field that has since been REMOVED must not break loading. The
 # setattr loop keeps it as an inert extra; the engine simply ignores it.
