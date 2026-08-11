@@ -1,4 +1,8 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
+# SPDX-License-Identifier: MIT
+#
 # blocks.py - tiny constructors for synthio's BlockInput graph.
+#
 # Its own module so synth.py and ahr_envelope.py can share these without a
 # circular import (synth.py imports ahr_envelope).
 #

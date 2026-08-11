@@ -1,9 +1,13 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
+# SPDX-License-Identifier: MIT
+#
 # synth.py - Synth base class.
+#
 # Owns: voice bookkeeping, patch load/save, live parameter updates.
 # Subclasses override _recompile() / _decompile() and _make_notes(), and
 # extend _PARAMS.
 #
-# Requires CircuitPython 10+ (mode-based synthio.Biquad).
+# Requires CircuitPython 10+ 
 #
 # --- two ideas run through this file ---------------------------------
 #
@@ -30,6 +34,7 @@
 #      amp_env, filt_type, wave.
 #   4. per-voice loop      - only for genuinely per-note values (detune).
 #      O(polyphony), so avoid in anything a knob drives.
+#
 # Every param is a property, so `synth.filt_f = 1000` is the fast path and
 # set_param() is just a string front-end for MIDI CC / UI code.
 

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
+# SPDX-License-Identifier: MIT
+#
 # wavetable.py - wavetable synth reading Serum-style single-cycle WAV
 # wavetables (16-bit mono, waves of `size` samples back to back).
 # Requires the adafruit_wave library.

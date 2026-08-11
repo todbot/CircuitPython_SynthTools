@@ -1,4 +1,8 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
+# SPDX-License-Identifier: MIT
+#
 # subtractive.py - classic two-oscillator subtractive synth.
+#
 # Osc2 is a detuned copy of osc1; detune=1.0 collapses to a single osc.
 
 import synthio

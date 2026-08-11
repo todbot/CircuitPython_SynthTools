@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
+# SPDX-License-Identifier: MIT
+#
 # ahr_envelope.py - Attack-Release envelope for synthio, as a modulation
 # SOURCE: it produces 0 -> amount and knows nothing about where that goes.
 #
@@ -10,9 +13,8 @@
 # The LFO is only a *position*: it runs 0 -> 1 through a shared, shaped
 # buffer, and CONSTRAINED_LERP decides what that position maps onto. So
 # release is a matter of moving the endpoints -- NOT of swapping the
-# waveform. That matters: synthio.LFO.waveform is read-only (verified on
-# CircuitPython 10.3.0-alpha.4, rp2350), so an implementation that
-# reassigns it raises
+# waveform. That matters: synthio.LFO.waveform is read-only,
+# so an implementation that# reassigns it raises
 #   AttributeError: can't set attribute 'waveform'
 # at every note-off. Mutating the buffer's contents in place is fine, and
 # is documented synthio behaviour.

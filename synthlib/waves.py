@@ -1,4 +1,8 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
+# SPDX-License-Identifier: MIT
+#
 # waves.py - waveform name -> ulab int16 array, built once, cached forever.
+#
 # All notes share these arrays by reference: zero per-note allocation.
 
 import random
