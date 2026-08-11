@@ -71,6 +71,29 @@ def wave_names():
     return list(_builders.keys())
 
 
+_rot_cache = {}  # (name, size) -> np.array, half-buffer-rotated copy of get_wave()
+
+
+def get_wave_rotated(name, size=256, volume=28000):
+    """Same waveform as get_wave(), phase-shifted 180 -- i.e. the second
+    half of the buffer first, then the first half. For a detuned second
+    oscillator that would otherwise start in phase with the first: they
+    read the same buffer from sample 0 at note-on, so the two are in phase
+    at the exact moment amplitude is highest (the attack), which is when
+    their summed peak is most likely to exceed int16 range. Starting osc2
+    at the opposite point in the cycle maximizes separation at that moment.
+    Built once and cached, like get_wave() -- not a per-voice or per-note
+    cost."""
+    key = (name, size)
+    w = _rot_cache.get(key)
+    if w is None:
+        base = get_wave(name, size, volume)
+        half = size // 2
+        w = np.concatenate((base[half:], base[:half]))
+        _rot_cache[key] = w
+    return w
+
+
 # --- envelope shapes for one-shot LFOs -------------------------------
 # A synthio.LFO with once=True runs its waveform once and then holds the
 # final sample forever. So a buffer holding nothing but a rise 0 -> peak
