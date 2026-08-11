@@ -8,7 +8,7 @@
 import synthio
 
 from .synth import Synth
-from .waves import get_wave, get_wave_rotated
+from .waves import get_wave_2x, random_phase_wave
 
 
 class SubtractiveSynth(Synth):
@@ -18,14 +18,12 @@ class SubtractiveSynth(Synth):
     # has run any setup of its own
     _wave_name = "SAW"
     _detune = 1.0
-    _wave2 = None
 
     def _recompile(self):
         super()._recompile()
         self._wave_name = self.patch.wave
         self._detune = self.patch.detune
-        self._wave = get_wave(self._wave_name)           # shared array
-        self._wave2 = get_wave_rotated(self._wave_name)  # osc2's phase-shifted copy
+        get_wave_2x(self._wave_name)  # warm the cache; note-on only slices
 
     def _decompile(self):
         super()._decompile()
@@ -36,18 +34,22 @@ class SubtractiveSynth(Synth):
         f = synthio.midi_to_hz(midi_note)
         amp = velocity / 127
         detuned = self._detune and self._detune != 1.0
+        # Each oscillator gets its OWN random start point in the wave's
+        # cycle, rerolled every note-on -- see waves.random_phase_wave().
         # Rebalanced only when osc2 exists: undetuned (single-osc) patches
         # stay at full amp, unchanged. When osc2 is present, split so the
         # two sum to amp * 1.0 instead of amp * 1.6 -- the old worst case
-        # (both oscillators in phase) could exceed int16 range on its own,
-        # before the filter even sees it. 0.625/0.375 keeps osc2 at 60% of
-        # osc1's level, same blend as before, just scaled so the ceiling is
-        # 1.0 instead of 1.6.
-        n1 = synthio.Note(f, waveform=self._wave, envelope=self._env,
+        # (both oscillators in phase, still possible now that phase is
+        # random) could exceed int16 range on its own, before the filter
+        # even sees it. 0.625/0.375 keeps osc2 at 60% of osc1's level, same
+        # blend as before, just scaled so the ceiling is 1.0 instead of 1.6.
+        n1 = synthio.Note(f, waveform=random_phase_wave(self._wave_name),
+                          envelope=self._env,
                           amplitude=amp * 0.625 if detuned else amp,
                           filter=self._make_filter(), bend=self._bend_cur)
         if detuned:
-            n2 = synthio.Note(f * self._detune, waveform=self._wave2,
+            n2 = synthio.Note(f * self._detune,
+                              waveform=random_phase_wave(self._wave_name),
                               envelope=self._env, amplitude=amp * 0.375,
                               filter=self._make_filter(), bend=self._bend_cur)
             return (n1, n2)
@@ -60,8 +62,7 @@ class SubtractiveSynth(Synth):
     @wave.setter
     def wave(self, v):
         self._wave_name = v
-        self._wave = get_wave(v)            # O(1); next note-on uses it
-        self._wave2 = get_wave_rotated(v)
+        get_wave_2x(v)  # O(1); warms the cache for the next note-on
 
     @property
     def detune(self):

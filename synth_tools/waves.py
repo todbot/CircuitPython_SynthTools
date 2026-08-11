@@ -71,27 +71,36 @@ def wave_names():
     return list(_builders.keys())
 
 
-_rot_cache = {}  # (name, size) -> np.array, half-buffer-rotated copy of get_wave()
+_2x_cache = {}  # (name, size) -> np.array, two cycles of get_wave() back to back
 
 
-def get_wave_rotated(name, size=256, volume=28000):
-    """Same waveform as get_wave(), phase-shifted 180 -- i.e. the second
-    half of the buffer first, then the first half. For a detuned second
-    oscillator that would otherwise start in phase with the first: they
-    read the same buffer from sample 0 at note-on, so the two are in phase
-    at the exact moment amplitude is highest (the attack), which is when
-    their summed peak is most likely to exceed int16 range. Starting osc2
-    at the opposite point in the cycle maximizes separation at that moment.
-    Built once and cached, like get_wave() -- not a per-voice or per-note
-    cost."""
+def get_wave_2x(name, size=256, volume=28000):
+    """Two cycles of get_wave(name), concatenated. Built once and cached,
+    like get_wave() itself -- not a per-voice or per-note cost. This is the
+    shared source buffer random_phase_wave() slices from: doubling the
+    length means any offset in [0, size) has a full cycle available without
+    having to wrap around the end."""
     key = (name, size)
-    w = _rot_cache.get(key)
+    w = _2x_cache.get(key)
     if w is None:
         base = get_wave(name, size, volume)
-        half = size // 2
-        w = np.concatenate((base[half:], base[:half]))
-        _rot_cache[key] = w
+        w = np.concatenate((base, base))
+        _2x_cache[key] = w
     return w
+
+
+def random_phase_wave(name, size=256, volume=28000):
+    """One cycle of `name`, starting at a random point in its cycle.
+
+    Unlike get_wave()/get_wave_2x(), this is NOT cached -- every call slices
+    a fresh `size`-sample window out of the shared 2x buffer at a random
+    offset, so the returned array differs call to call. That makes it a
+    per-note-on cost: one array copy, the same tier as building a fresh
+    synthio.Note or Biquad at press time, not a per-sample one. Call it once
+    per oscillator per note-on, not from a hot path."""
+    wave2x = get_wave_2x(name, size, volume)
+    start = random.randint(0, size - 1)
+    return wave2x[start:start + size]
 
 
 # --- envelope shapes for one-shot LFOs -------------------------------
