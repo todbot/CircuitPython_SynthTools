@@ -1,15 +1,15 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
 # SPDX-License-Identifier: MIT
 #
-# synthlib_pad_demo.py -- slow filter sweeps under sustained chords.
+# synthinst_pad_demo.py -- slow filter sweeps under sustained chords.
 #
-# Copy flat onto CIRCUITPY beside synth_setup.py and the synthlib/ package,
+# Copy flat onto CIRCUITPY beside synth_setup.py and the synth_tools/ package,
 # then either rename it code.py or, from the serial REPL:
 #
-#     import synthlib_pad_demo
+#     import synthinst_pad_demo
 #
-# The third of the three: synthlib_fenv_demo.py is the filter as a plucky
-# attack gesture, synthlib_pitch_demo.py is everything reaching note.bend,
+# The third of the three: synthinst_fenv_demo.py is the filter as a plucky
+# attack gesture, synthinst_pitch_demo.py is everything reaching note.bend,
 # and this one is the filter moving SLOWLY under held chords -- where the
 # envelope's shape and the filter LFO actually become audible as motion
 # rather than as a transient.
@@ -39,7 +39,7 @@
 import time
 
 from synth_setup import synth as engine
-from synthlib import Patch, SubtractiveSynth
+from synth_tools import Patch, SubtractiveSynth
 
 patch = Patch(
     name="slowpad",

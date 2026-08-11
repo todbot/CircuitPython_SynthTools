@@ -15,8 +15,8 @@ class FilterMode:
 
 
 class MathOperation:
-    """Only the operations synthlib actually uses. Definitions are copied
-    from the real synthio docs so the arithmetic matches the device."""
+    """Only the operations synth_tools' engine actually uses. Definitions are
+    copied from the real synthio docs so the arithmetic matches the device."""
     SUM = "SUM"                            # a+b+c
     PRODUCT = "PRODUCT"                    # a*b*c
     LERP = "LERP"                          # a*(1-c) + b*c
@@ -64,8 +64,8 @@ class LFO:
         """Deliberately READ-ONLY, matching real synthio.
 
         On CircuitPython 10.3.0-alpha.4 (rp2350), `lfo.waveform = arr` raises
-        AttributeError. An earlier synthlib swapped buffers here to do its
-        release and crashed at every note-off on hardware -- while an
+        AttributeError. An earlier engine design swapped buffers here to do
+        its release and crashed at every note-off on hardware -- while an
         earlier version of this stub, which allowed the assignment, passed
         happily. A stub that is more permissive than the platform is worse
         than no stub, so this one refuses too.

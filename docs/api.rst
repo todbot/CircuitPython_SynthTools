@@ -6,3 +6,4 @@
 
 .. automodule:: synth_tools
     :members:
+    :imported-members:

@@ -21,11 +21,13 @@ extensions = [
     "sphinx.ext.todo",
 ]
 
-# TODO: Please Read!
-# Uncomment the below if you use native CircuitPython modules such as
-# digitalio, micropython and busio. List the modules you use. Without it, the
-# autodoc module docs will fail to generate with a warning.
-# autodoc_mock_imports = ["digitalio", "busio"]
+# synth_tools/__init__.py now imports the engine (synth.py etc.), which pulls
+# in synthio and ulab at import time -- neither exists off-device, so autodoc
+# needs mocks or it fails to import the package at all. adafruit_wave is
+# optional at runtime (synth_tools/__init__.py already guards it with
+# try/except ImportError) but still needs mocking here since the docs build
+# has no real one installed either.
+autodoc_mock_imports = ["synthio", "ulab", "adafruit_wave"]
 
 autodoc_preserve_defaults = True
 

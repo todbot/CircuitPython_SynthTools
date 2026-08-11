@@ -22,7 +22,8 @@ synth.blocks.append(wave_lfo)  # this activates LFO when not attached to Note
 
 while True:
     # regularly copy LFO to wave_pos by hand
-    wavetable1.wave_pos = wave_lfo.value
+    wave_pos = wave_lfo.value
+    wavetable1.set_wave_pos(wave_pos)
     wave_lfo.rate = (knobA.value / 65535) * 0.25
-    print("wave_pos:%.2f" % wavetable1.wave_pos)
+    print("wave_pos:%.2f" % wave_pos)
     time.sleep(0.01)

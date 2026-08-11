@@ -1,12 +1,12 @@
-# code.py - synthlib demo for RP2040-class boards, CircuitPython 10+
+# code.py - synth_tools instrument demo for RP2040-class boards, CircuitPython 10+
 import time
 import board
 import synthio
 import audiomixer
 import audiopwmio  # or audiobusio for I2S
 
-from synthlib import Patch, SubtractiveSynth
-# from synthlib.wavetable import WavetableSynth   # needs adafruit_wave
+from synth_tools import Patch, SubtractiveSynth
+# from synth_tools.wavetable_synth import WavetableSynth   # needs adafruit_wave
 
 # --- audio setup ---------------------------------------------------------
 audio = audiopwmio.PWMAudioOut(board.GP10)

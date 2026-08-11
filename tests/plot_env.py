@@ -5,7 +5,7 @@
     micropython tests/plot_env.py
 
 Not a test -- a look at what the envelope actually does. It calls the REAL
-synthlib.waves.fill_env_rise and evaluates the REAL block arithmetic that
+synth_tools.waves.fill_env_rise and evaluates the REAL block arithmetic that
 AHREnvelope.make() / start_release() set up, so it cannot drift away from
 what the synth plays:
 
@@ -17,7 +17,7 @@ waveform. The release re-runs that SAME rising buffer forward -- it does not
 play it backwards, and it is not a second, independently shaped curve. That
 is why the buffer holds 1-(1-t)^curve rather than the more obvious t^curve:
 it is the release that decides, since `V * (1 - s(t))` inverts whatever
-shape s has. See synthlib/waves.py.
+shape s has. See synth_tools/waves.py.
 """
 
 import sys
@@ -26,7 +26,7 @@ _D = __file__.rsplit("/", 1)[0] if "/" in __file__ else "."
 sys.path.insert(0, _D + "/stubs")
 sys.path.insert(0, _D + "/..")
 
-from synthlib.waves import ENV_PEAK, env_buffer, fill_env_rise  # noqa: E402
+from synth_tools.waves import ENV_PEAK, env_buffer, fill_env_rise  # noqa: E402
 
 WIDTH = 62          # columns for the whole attack+release timeline
 HEIGHT = 15

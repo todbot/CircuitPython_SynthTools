@@ -1,4 +1,4 @@
-"""Numeric checks on the AHR envelope shape in synthlib/waves.py.
+"""Numeric checks on the AHR envelope shape in synth_tools/waves.py.
 
 Runs the REAL fill_env_rise -- not a copy of it -- against whichever ulab
 backend is available (real numpy under CPython, the pure fallback under
@@ -10,7 +10,7 @@ There is only one shape, and it is only a rise:
     rise and force the release rate to compensate for it;
   - the RELEASE re-runs this same rising curve through a CONSTRAINED_LERP
     with swapped endpoints, so there is no falling buffer either.
-See synthlib/ahr_envelope.py.
+See synth_tools/ahr_envelope.py.
 
 Because the release is `V * (1 - s(t))`, it INVERTS whatever curvature the
 buffer has -- so the buffer holds 1-(1-t)^curve, and the release comes out
@@ -28,7 +28,7 @@ sys.path.insert(0, _D + "/stubs")
 sys.path.insert(0, _D + "/..")
 
 import ulab.numpy as np  # noqa: E402
-from synthlib.waves import (  # noqa: E402
+from synth_tools.waves import (  # noqa: E402
     ENV_SIZE, ENV_PEAK, env_buffer, fill_env_rise,
 )
 

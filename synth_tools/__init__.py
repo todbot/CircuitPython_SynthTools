@@ -25,5 +25,19 @@ Implementation Notes
 
 # imports
 
+from .patch import Patch, save_patches, load_patches
+from .synth import Synth
+from .subtractive_synth import SubtractiveSynth
+
+# wavetable_synth needs the adafruit_wave library; don't break the whole
+# package if it isn't installed. Import it directly if you want it:
+#     from synth_tools.wavetable import Wavetable
+#     from synth_tools.wavetable_synth import WavetableSynth
+try:
+    from .wavetable import Wavetable
+    from .wavetable_synth import WavetableSynth
+except ImportError:
+    pass
+
 __version__ = "0.0.0+auto.0"
 __repo__ = "https://github.com/todbot/CircuitPython_Synth_Tools.git"

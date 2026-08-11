@@ -1,4 +1,4 @@
-# synthlib tests
+# synth_tools tests
 
 Plain scripts, no pytest. They exit non-zero on failure so they work under a
 bare MicroPython as well as CPython — which matters, because this library
@@ -36,7 +36,7 @@ evidence that the pure-Python fallback is faithful.
 - `test_patch.py` — patch round-trip. Needs no stubs at all (`patch.py` imports
   only `json`), so it is the cheapest §7 canary: read-only instance `__dict__`,
   `dict.update` keywords, `amp_env` being a list rather than a tuple.
-- `test_env_shapes.py` — the AHR envelope shape from `synthlib/waves.py`.
+- `test_env_shapes.py` — the AHR envelope shape from `synth_tools/waves.py`.
   Calls the **real** `fill_env_rise`, not a copy of it. There is one buffer and
   it holds nothing but a rise: the *hold* is what `once=True` already does after
   the last sample, and the *release* re-runs the same rising curve through a
@@ -60,7 +60,7 @@ evidence that the pure-Python fallback is faithful.
   including subclass params.
 - `stubs/synthio.py` — no DSP. `Math`/`LFO` resolve nested blocks so `.value`
   is meaningful, which is what makes block-graph assertions possible. It
-  implements only the five `MathOperation`s synthlib uses, with the arithmetic
+  implements only the five `MathOperation`s synth_tools' engine uses, with the arithmetic
   copied from the real synthio docs, and **raises on any other operation** —
   so reaching for a new op means adding it here first.
 - `stubs/ulab/numpy.py` — real numpy under CPython; a small wrapper class
@@ -82,8 +82,9 @@ past half its height by halfway through the release.
 ## Known coverage gap
 
 **`WavetableSynth` is not tested on either tier.** There is no `adafruit_wave`
-stub, so `synthlib/__init__.py`'s `try/except ImportError` swallows the import
-and `WavetableSynth` is never even exported. `test_wiring.py` asserts that
+stub, so `synth_tools/__init__.py`'s `try/except ImportError` swallows the
+`wavetable.py`/`wavetable_synth.py` imports and neither `Wavetable` nor
+`WavetableSynth` is ever even exported. `test_wiring.py` asserts that
 graceful degradation explicitly — so the gap is visible rather than silent —
 but covering the class itself needs an `adafruit_wave` stub plus a small WAV
 fixture. `Wavetable.set_wave_pos`'s int16 lerp (§8) is the part that would
@@ -100,8 +101,8 @@ moves between sessions — it has come up as both `usbmodem11201` and
 ls /dev/tty.usbmodem*                     # whatever it is today
 PORT=$(ls /dev/tty.usbmodem* | head -1)
 
-mkdir -p /Volumes/CIRCUITPY/synthlib
-cp synthlib/*.py /Volumes/CIRCUITPY/synthlib/
+mkdir -p /Volumes/CIRCUITPY/synth_tools
+cp synth_tools/*.py /Volumes/CIRCUITPY/synth_tools/
 cp examples/synth_setup.py /Volumes/CIRCUITPY/
 dot_clean -m /Volumes/CIRCUITPY/          # see below
 python3 tests/hw/run_on_device.py tests/hw/test_device.py \
@@ -121,14 +122,14 @@ disk. It takes `--port` and `--reboot`. **Its default port,
 `/dev/tty.usbmodem11201`, is a guess and is regularly wrong** — pass `--port`
 explicitly.
 
-`test_device.py` needs `synthlib/` and `synth_setup.py` on the device, and it
+`test_device.py` needs `synth_tools/` and `synth_setup.py` on the device, and it
 mutes the mixer while it runs — it is checking the block graph, not listening.
 180 s is not generous: the test sleeps its way through real envelope times.
 
 Anything that only needs `synthio` — the arithmetic and behaviour probes below —
 can be run as a standalone snippet through `run_on_device.py` with **no files
 copied to the drive at all**. Prefer that when the question is about synthio
-rather than about synthlib.
+rather than about the engine in `synth_tools/`.
 
 **This tier is not optional for synthio work.** It is the only thing that catches
 what the C API actually permits. It has already found that `synthio.LFO.waveform`
@@ -158,8 +159,8 @@ exactly what the retired hold segment used to require (0.48 s measured against a
 
 The CPython and MicroPython tiers render no audio, and the stubs accept
 assignments real synthio rejects — that is exactly how the read-only
-`LFO.waveform` slipped through. Treat them as checks on *synthlib's* logic, not
-on synthio's contract; use the hardware tier for the latter.
+`LFO.waveform` slipped through. Treat them as checks on the *engine's* logic,
+not on synthio's contract; use the hardware tier for the latter.
 
 Nothing here can tell you how it **sounds**. Glitches, clicks and zipper noise
 need a listener: run the hardware tier with the mixer up, or play the board.

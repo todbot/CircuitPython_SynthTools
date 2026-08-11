@@ -1,5 +1,5 @@
 #!/bin/sh
-# Run the synthlib test suite under every interpreter available.
+# Run the synth_tools test suite under every interpreter available.
 #
 # There is no pytest here on purpose: the library targets CircuitPython, so
 # the tests are plain scripts that exit non-zero on failure and can run on

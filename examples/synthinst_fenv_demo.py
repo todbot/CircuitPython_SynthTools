@@ -1,12 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
 # SPDX-License-Identifier: MIT
 #
-# synthlib_fenv_demo.py -- the synthlib AHR filter envelope, audibly.
+# synthinst_fenv_demo.py -- the synth_tools AHR filter envelope, audibly.
 #
-# Copy flat onto CIRCUITPY beside synth_setup.py and the synthlib/ package,
+# Copy flat onto CIRCUITPY beside synth_setup.py and the synth_tools/ package,
 # then either rename it code.py or, from the serial REPL:
 #
-#     import synthlib_fenv_demo
+#     import synthinst_fenv_demo
 #
 # It plays one bass riff over and over, changing a single filter-envelope
 # parameter every few bars and printing what it just changed, so you can
@@ -15,7 +15,7 @@
 import time
 
 from synth_setup import synth as engine
-from synthlib import Patch, SubtractiveSynth
+from synth_tools import Patch, SubtractiveSynth
 
 # --- a patch built around the filter envelope ---------------------------
 patch = Patch(

@@ -2,8 +2,8 @@ import time
 import synthio
 
 from synth_setup import synth as engine, mixer
-from synthlib import Patch, SubtractiveSynth
-from synthlib.ahr_envelope import AHREnvelope
+from synth_tools import Patch, SubtractiveSynth
+from synth_tools.ahr_envelope import AHREnvelope
 
 mixer.voice[0].level = 0.0          # verify the block graph, don't make noise
 

@@ -1,15 +1,15 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
 # SPDX-License-Identifier: MIT
 #
-# synthlib_pitch_demo.py -- synthlib's pitch modulation, audibly.
+# synthinst_pitch_demo.py -- synth_tools' pitch modulation, audibly.
 #
-# Copy flat onto CIRCUITPY beside synth_setup.py and the synthlib/ package,
+# Copy flat onto CIRCUITPY beside synth_setup.py and the synth_tools/ package,
 # then either rename it code.py or, from the serial REPL:
 #
-#     import synthlib_pitch_demo
+#     import synthinst_pitch_demo
 #
 # Everything that reaches note.bend, one parameter at a time, printing what
-# it just changed. Companion to synthlib_fenv_demo.py.
+# it just changed. Companion to synthinst_fenv_demo.py.
 #
 # --- bend units --------------------------------------------------------
 # 1.0 = ONE OCTAVE. So:
@@ -34,7 +34,7 @@
 import time
 
 from synth_setup import synth as engine
-from synthlib import Patch, SubtractiveSynth
+from synth_tools import Patch, SubtractiveSynth
 
 patch = Patch(
     name="bender",

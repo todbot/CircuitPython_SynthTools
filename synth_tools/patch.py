@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
+# SPDX-License-Identifier: MIT
+#
 # patch.py - pure-data patch objects, trivially JSON serializable.
 # Rule: only JSON-native types live here (str, int, float, bool, list).
 # Never a synthio object, never a ulab array.

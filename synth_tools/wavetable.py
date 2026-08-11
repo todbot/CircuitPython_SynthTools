@@ -1,75 +1,63 @@
-## pylint: disable=invalid-name,too-many-arguments,multiple-statements
-# multiple-statements,too-many-instance-attributes
-# SPDX-FileCopyrightText: Copyright (c) 2023 Tod Kurt
+# SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
 # SPDX-License-Identifier: MIT
-"""
-`waves`
-================================================================================
-
-`Wavetable` is a set of waveform construction tools for `synthio`.
-`Wavetable` uses `Waves` to create a Wavetable waveform for `Instrument`
-that can load arbitrary two waveforms and mix between them.
-
-Part of synth_tools.
-
-"""
+#
+# wavetable.py - reads Serum-style single-cycle WAV wavetables (16-bit mono,
+# waves of `size` samples back to back) into a reusable waveform buffer.
+# Requires the adafruit_wave library.
+#
+# This is the tool: a waveform-buffer helper for use as a synthio.Note's
+# `waveform`. For the polyphonic synth instrument built on top of it, see
+# wavetable_synth.py.
 
 import ulab.numpy as np
 import adafruit_wave
 
 
-def lerp(a, b, t):  # pylint: disable=invalid-name
-    """Mix between values a and b, works with numpy arrays too, t ranges 0-1"""
-    return (1 - t) * a + t * b
-
-
 class Wavetable:
-    """
-    A 'waveform' for synthio.Note that uses a wavetable with a scannable
-    wave position. A wavetable is usually a collection of harmonically-related
-    single-cycle waveforms. Often the waveforms are 256 samples long and
-    the wavetable containing 64 waves. This wavetable oscillator lets the
-    user pick which of those 64 waves to use, usually allowing one to mix
-    between two waves.
+    """Reads one wave (or a lerp between two adjacent waves) out of a
+    wavetable WAV file into a fixed, reusable buffer."""
 
-    Some example wavetables usable by this classs: https://waveeditonline.com/
-
-    In this implementation, you select a wave position (wave_pos) that can be
-    fractional, and the fractional part allows for mixing of the waves
-    """
-
-    def __init__(self, filepath, wave_len=256):
+    def __init__(self, filepath, size=256):
         self.w = adafruit_wave.open(filepath)
-        self.wave_len = wave_len  # how many samples in each wave
         if self.w.getsampwidth() != 2 or self.w.getnchannels() != 1:
-            raise ValueError("unsupported WAV format")
-        # empty buffer we'll copy into
-        self.waveform = np.zeros(wave_len, dtype=np.int16)
-        self.num_waves = self.w.getnframes() // self.wave_len
-        self.num_samples = self.w.getnframes()
-        self.sample_rate = self.w.getframerate()
-        self.wave_pos = 0
+            raise ValueError("16-bit mono WAV required")
+        self.size = size
+        self.num_waves = self.w.getnframes() // size
+        self.waveform = np.zeros(size, dtype=np.int16)  # the shared buffer
 
-    @property
-    def wave_pos(self):
-        """return current position, 0-wave_len-1"""
-        return self._wave_pos
+    def _read_wave(self, i):
+        self.w.setpos(i * self.size)
+        return np.frombuffer(self.w.readframes(self.size), dtype=np.int16)
 
-    @wave_pos.setter
-    def wave_pos(self, pos):
-        """
-        Pick where in wavetable to be, morphing between waves.
-        wave_pos integer part of specifies which wave from 0-num_waves,
-        and fractional part specifies mix between wave and wave next to it
-        (e.g. wave_pos=15.66 chooses 1/3 of waveform 15 and 2/3 of waveform 16)
-        """
-        pos = min(max(pos, 0), self.num_waves - 1)  # constrain
-        samp_pos = int(pos) * self.wave_len  # get sample position
-        self.w.setpos(samp_pos)
-        wave_a = np.frombuffer(self.w.readframes(self.wave_len), dtype=np.int16)
-        self.w.setpos(samp_pos + self.wave_len)  # one wave up
-        wave_b = np.frombuffer(self.w.readframes(self.wave_len), dtype=np.int16)
-        pos_frac = pos - int(pos)  # fractional position between wave A & B
-        # mix waveforms A & B
-        self.waveform[:] = lerp(wave_a, wave_b, pos_frac)
-        self._wave_pos = pos
+    def set_wave_pos(self, pos):
+        """pos is fractional: 3.25 = 25% between wave 3 and wave 4."""
+        n = self.num_waves
+        if n < 2:                       # single-wave file: nothing to blend
+            self.waveform[:] = self._read_wave(0)
+            return
+        if pos < 0:
+            pos = 0.0
+        elif pos > n - 1:
+            pos = n - 1.0
+        i = int(pos)
+        if i > n - 2:                   # at the very top, blend the last pair
+            i = n - 2
+        frac = pos - i
+
+        wave_a = self._read_wave(i)
+        if frac <= 0.0:                 # exact wave: skip the read and the math
+            self.waveform[:] = wave_a
+            return
+        wave_b = self._read_wave(i + 1)
+
+        # Convex combination, evaluated in float. Do NOT write this as the
+        # usual  wave_a + frac * (wave_b - wave_a)  -- that subtraction is
+        # performed in int16 and wraps whenever the two samples straddle
+        # zero at high amplitude (32000 - -32000 = 64000 -> +1536), which
+        # then pushes the result past 32767 and raises
+        #   OverflowError: value must fit in 2 byte(s)
+        # on the store back into the int16 buffer. Multiplying by the float
+        # weights first promotes to float, and since frac is in [0,1] the
+        # result is bounded by the two inputs, so it always fits.
+        self.waveform[:] = np.array(wave_a * (1.0 - frac) + wave_b * frac,
+                                    dtype=np.int16)

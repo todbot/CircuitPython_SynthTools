@@ -12,7 +12,7 @@ keywords).
 import sys
 
 _D = __file__.rsplit("/", 1)[0] if "/" in __file__ else "."
-sys.path.insert(0, _D + "/../synthlib")   # direct: skips synthlib/__init__
+sys.path.insert(0, _D + "/../synth_tools")   # direct: skips synth_tools/__init__
 
 from patch import Patch, save_patches, load_patches  # noqa: E402
 

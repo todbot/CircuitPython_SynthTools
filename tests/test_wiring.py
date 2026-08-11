@@ -1,4 +1,4 @@
-"""Integration checks for synthlib's Synth against the synthio stubs.
+"""Integration checks for synth_tools' Synth against the synthio stubs.
 
 Proves the things CLAUDE-synthlib.md sections 4-5 depend on: block identity
 and sharing, in-place buffer rewrites, param routing, and -- new -- that the
@@ -26,10 +26,10 @@ sys.path.insert(0, _D + "/stubs")
 sys.path.insert(0, _D + "/..")
 
 import synthio  # noqa: E402
-import synthlib  # noqa: E402
-from synthlib import Patch, SubtractiveSynth  # noqa: E402
-from synthlib.ahr_envelope import AHREnvelope  # noqa: E402
-from synthlib.waves import ENV_PEAK  # noqa: E402
+import synth_tools  # noqa: E402
+from synth_tools import Patch, SubtractiveSynth  # noqa: E402
+from synth_tools.ahr_envelope import AHREnvelope  # noqa: E402
+from synth_tools.waves import ENV_PEAK  # noqa: E402
 
 fails = []
 
@@ -44,13 +44,13 @@ def vals(a):
 
 
 # --- the package must survive a missing optional dependency --------------
-# synthlib/__init__.py wraps the wavetable import in try/except ImportError
+# synth_tools/__init__.py wraps the wavetable import in try/except ImportError
 # so a device without adafruit_wave still gets the rest of the package.
 # There is no adafruit_wave stub here, so that path is exercised every run
 # -- which also means WavetableSynth itself is NOT covered by these tests.
-ck(hasattr(synthlib, "Synth") and hasattr(synthlib, "SubtractiveSynth"),
+ck(hasattr(synth_tools, "Synth") and hasattr(synth_tools, "SubtractiveSynth"),
    "core exports must survive a missing adafruit_wave")
-ck(not hasattr(synthlib, "WavetableSynth"),
+ck(not hasattr(synth_tools, "WavetableSynth"),
    "without adafruit_wave, WavetableSynth should be absent rather than raising "
    "-- if this fails, a real adafruit_wave is installed and the graceful "
    "degradation path is no longer being tested")
