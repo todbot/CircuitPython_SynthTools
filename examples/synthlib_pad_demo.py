@@ -65,7 +65,7 @@ patch = Patch(
 
 synth = SubtractiveSynth(engine, patch)
 
-Am = (45, 52, 57, 60)     # A2 E3 A3 C4
+Am = (45, 52+12, 57, 60)     # A2 E4 A3 C4
 G = (43, 50, 55, 59)      # G2 D3 G3 B3
 
 
@@ -97,38 +97,38 @@ def stagger(label, notes=Am, gap=0.9, secs=5.0, tail=2.8):
 
 
 while True:
-    # print()
-    # print("=== the envelope as slow motion ===")
+    print()
+    print("=== the envelope as slow motion ===")
 
-    # # 1. reference: filter parked, nothing moves
-    # synth.fenv_amount = 0
-    # chord("fenv_amount=0      -- static filter, dull and unmoving", secs=2)
+    # 1. reference: filter parked, nothing moves
+    synth.fenv_amount = 0
+    chord("fenv_amount=0      -- static filter, dull and unmoving", secs=2)
 
-    # # 2. the classic slow swell. Held 6s against a 2.5s attack, so you hear
-    # #    the sweep finish and then sit at the top for a while.
-    # synth.fenv_amount = 5000
-    # synth.fenv_attack = 2.5
-    # chord("fenv_attack=2.5    -- slow swell up to 5180 Hz, then holds")
+    # 2. the classic slow swell. Held 6s against a 2.5s attack, so you hear
+    #    the sweep finish and then sit at the top for a while.
+    synth.fenv_amount = 5000
+    synth.fenv_attack = 2.5
+    chord("fenv_attack=2.5    -- slow swell up to 5180 Hz, then holds")
 
-    # # 3. slower still, and held longer to contain it
-    # synth.fenv_attack = 5.0
-    # chord("fenv_attack=5.0    -- a very slow open, held 7s", secs=6.0)
-    # synth.fenv_attack = 2.5
+    # 3. slower still, and held longer to contain it
+    synth.fenv_attack = 5.0
+    chord("fenv_attack=5.0    -- a very slow open, held 7s", secs=6.0)
+    synth.fenv_attack = 2.5
 
-    # # 4. the release half. fenv_release 2.5 under an amp release of 2.6:
-    # #    the filter closes as the chord fades, which is most of what makes
-    # #    a pad sound like it is being played rather than switched off.
-    # synth.fenv_release = 2.5
-    # chord("fenv_release=2.5   -- listen past the key release, it closes down",
-    #       secs=4.0, tail=3.5)
+    # 4. the release half. fenv_release 2.5 under an amp release of 2.6:
+    #    the filter closes as the chord fades, which is most of what makes
+    #    a pad sound like it is being played rather than switched off.
+    synth.fenv_release = 2.5
+    chord("fenv_release=2.5   -- listen past the key release, it closes down",
+          secs=4.0, tail=3.5)
 
-    # # 5. curve. On a plucky note this is nearly inaudible; over 2.5s it is
-    # #    obvious. 1 is a straight line; 3 snaps open early then eases into
-    # #    the top, and drops away fast on release with a long tail.
-    # synth.fenv_curve = 3
-    # chord("fenv_curve=3       -- same times, front-loaded: opens early",
-    #       secs=6.0, tail=3.5)
-    # synth.fenv_curve = 1
+    # 5. curve. On a plucky note this is nearly inaudible; over 2.5s it is
+    #    obvious. 1 is a straight line; 3 snaps open early then eases into
+    #    the top, and drops away fast on release with a long tail.
+    synth.fenv_curve = 3
+    chord("fenv_curve=3       -- same times, front-loaded: opens early",
+          secs=6.0, tail=3.5)
+    synth.fenv_curve = 1
 
     print()
     print("=== the filter LFO as slow motion ===")
