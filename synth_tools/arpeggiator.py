@@ -48,7 +48,7 @@ class Arpeggiator:
 
     def __init__(self, rate, on_func=None, off_func=None):
         self.rate = rate  # 1 = 1/4 note, 2 = 1/8th note, 4 = 16th note
-        self.set_bpm(120)  # FIXME
+        self.set_bpm(120, rate)
         self.oct_distance = 12  # distance between repeats  (Ableton nomenclature)
         self.oct_range = 1  # max number of self.distance to do (Ableton nomenclature)
         self.octave = 0  # which arp step we're on, this is confusing with above
