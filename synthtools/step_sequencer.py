@@ -2,10 +2,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2023 Tod Kurt
 # SPDX-License-Identifier: MIT
 """
-`step_sequencer`
+``step_sequencer``
 ================================================================================
 
-`StepSequencer` is a note-based sequencer for musical events.
+``StepSequencer`` is a note-based sequencer for musical events.
 
 Part of synthtools.
 

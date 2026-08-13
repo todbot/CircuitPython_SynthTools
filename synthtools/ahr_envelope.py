@@ -181,9 +181,9 @@ class AHREnvelope:
         """One voice's envelope, or None when it would do nothing at all.
 
         Returns the CONSTRAINED_LERP block to add to a destination. It
-        carries everything start_release() needs: the position LFO in `c`.
+        carries everything start_release() needs: the position LFO in ``c``.
 
-        `gain` is a per-voice depth scale -- a plain number, or a block
+        ``gain`` is a per-voice depth scale -- a plain number, or a block
         (e.g. a velocity LERP) so whatever drives it stays live.
 
         Returning None is what makes the envelope cost literally nothing

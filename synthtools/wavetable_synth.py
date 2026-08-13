@@ -16,6 +16,17 @@ from .wavetable import Wavetable
 
 
 class WavetableSynth(Synth):
+    """Polyphonic wavetable synth: one Note per key, its waveform a
+    position (wave_pos) lerped between two adjacent frames of a loaded
+    wavetable WAV file (wave_file), through the shared Synth
+    filter/envelope graph.
+
+    All sounding notes share the Wavetable's waveform buffer by
+    reference, so moving wave_pos morphs already-sounding notes live --
+    the lerp writes into the one buffer synthio is reading from, O(1) in
+    polyphony regardless of how many notes are held.
+    """
+
     _PARAMS = Synth._PARAMS + ("wave_pos", "wave_file")
 
     # class attrs: base __init__ calls _recompile() before subclass setup

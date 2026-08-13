@@ -53,6 +53,26 @@ FILTER_MODES = {
 
 
 class Synth:
+    """Base synth engine wrapping one synthio.Synthesizer.
+
+    Owns voice bookkeeping (note_on()/note_off()), patch load/save, and
+    live parameter updates. A style subclass overrides _make_notes() (what
+    a key sounds like) and typically _recompile()/_decompile() (how the
+    subclass's own Patch fields compile to/from live state), extending
+    _PARAMS with its own settable names. SubtractiveSynth and
+    WavetableSynth are the two worked examples.
+
+    Every parameter is a plain property (``synth.filt_f = 2000``), each
+    backed by a shared synthio block so one write reaches every sounding
+    voice in O(1) regardless of polyphony -- see the module docstring
+    above for the full cost model. set_param(name, val) is a string
+    front-end onto the same properties, for MIDI CC / UI code.
+
+    A Patch is inert JSON-able data, compiled into live blocks once by
+    load_patch() -> _recompile(); nothing after that writes back to it
+    until save_patch() explicitly snapshots live state via _decompile().
+    """
+
     # names settable via set_param(); also what a UI can enumerate
     # fmt: off
     _PARAMS = ("filt_f", "filt_q", "filt_type", "amp_env",
@@ -573,8 +593,8 @@ class Synth:
     def filt_lfo_amount(self, v):
         """Hz ADDED above filt_f: the cutoff swings 0..v, never below it.
 
-        synthio's LFO is `waveform[idx] * scale + offset`, and the default
-        waveform is a triangle centred on zero, so `scale` on its own is a
+        synthio's LFO is ``waveform[idx] * scale + offset``, and the default
+        waveform is a triangle centred on zero, so ``scale`` on its own is a
         HALF-swing about zero. Writing scale and offset to the same v/2
         recentres it: -v/2..+v/2 shifted up by v/2 is 0..v. This is the
         min/max-to-midpoint/range conversion from README-2-Modulation.md,
@@ -656,7 +676,7 @@ class Synth:
 
     def set_param(self, name, val):
         """String front-end for MIDI CC / UI / patch-editor code.
-        Prefer `synth.filt_f = v` in hot loops."""
+        Prefer ``synth.filt_f = v`` in hot loops."""
         if name not in self._PARAMS:
             raise KeyError(name)
         setattr(self, name, val)

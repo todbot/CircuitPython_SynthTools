@@ -1,10 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2023 Tod Kurt
 # SPDX-License-Identifier: MIT
 """
-`pitch_glider`
+``pitch_glider``
 ================================================================================
 
-`Glider` is a portamento feature for synthio.Notes. Attach to note.bend.
+``Glider`` is a portamento feature for synthio.Notes. Attach to note.bend.
 
 10 Feb 2025 - @todbot / Tod Kurt
 

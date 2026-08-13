@@ -101,10 +101,13 @@ class Patch:
 
 
 def save_patches(patches, filepath):
+    """Write a list of Patch objects to filepath as one JSON array."""
     with open(filepath, "w") as f:
         json.dump([p.to_dict() for p in patches], f)
 
 
 def load_patches(filepath):
+    """Read a list of Patch objects back from a file written by
+    save_patches()."""
     with open(filepath) as f:
         return [Patch.from_dict(d) for d in json.load(f)]

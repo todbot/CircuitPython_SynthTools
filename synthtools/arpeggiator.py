@@ -2,10 +2,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2023 Tod Kurt
 # SPDX-License-Identifier: MIT
 """
-`arpeggiator`
+``arpeggiator``
 ================================================================================
 
-`Arpeggiator` is a melodic arpeggiator / sequencer for musical events
+``Arpeggiator`` is a melodic arpeggiator / sequencer for musical events
 
 Part of synthtools.
 
@@ -47,8 +47,8 @@ class Arpeggiator:
     """Poll-based arpeggiator: call update() as often as possible.
 
     Holds a stack of notes added with add_note()/del_note() and steps
-    through them at `step_millis` (derived from `rate` and bpm, set via
-    set_bpm()), firing `on_func`/`off_func` at each gated step. `rate` is
+    through them at ``step_millis`` (derived from ``rate`` and bpm, set via
+    set_bpm()), firing ``on_func``/``off_func`` at each gated step. ``rate`` is
     in notes-per-beat: 1 = quarter notes, 2 = eighths, 4 = sixteenths.
     """
 

@@ -2,10 +2,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2023 Tod Kurt
 # SPDX-License-Identifier: MIT
 """
-`trig_sequencer`
+``trig_sequencer``
 ================================================================================
 
-`TrigSequencer` is a trigger-based (drum) sequencer for rhythmic events.
+``TrigSequencer`` is a trigger-based (drum) sequencer for rhythmic events.
 
 Part of synthtools.
 

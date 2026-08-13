@@ -12,6 +12,18 @@ from .waves import get_wave_2x, random_phase_wave
 
 
 class SubtractiveSynth(Synth):
+    """Classic two-oscillator subtractive synth: one waveform, an optional
+    detuned second oscillator, through the shared Synth filter/envelope
+    graph.
+
+    ``detune=1.0`` (the default) collapses to a single oscillator, so an
+    ordinary patch costs one Note per key; any other detune spends TWO
+    Notes per key (see the polyphony-budget note in the project docs).
+    Each oscillator gets its own random phase per note-on, and osc2 is
+    scaled down (60% of osc1) so a detuned voice's peak amplitude does not
+    exceed a single-oscillator one.
+    """
+
     _PARAMS = Synth._PARAMS + ("wave", "detune")
 
     # class attrs: the base __init__ builds its graph before this subclass

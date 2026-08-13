@@ -78,8 +78,8 @@ def _ints(s):
 
 
 def _resample_table(table, size, vol, peak=127):
-    """Lerp a small native `table` (length N+1, table[-1] == table[0]) up
-    to `size` samples, scaled from its own +-127-ish native range to
+    """Lerp a small native ``table`` (length N+1, table[-1] == table[0]) up
+    to ``size`` samples, scaled from its own +-127-ish native range to
     +-vol. Plain Python scalar loop, not vectorized ulab ops: the
     MicroPython ulab fallback (tests/stubs/ulab/numpy.py) supports only
     int/slice indexing, so there is no fancy-indexing gather to lean on
@@ -191,7 +191,7 @@ _builders = {
 
 
 def get_wave(name, size=256, volume=28000):
-    """Return a cached int16 waveform array for `name`. Builds on first use."""
+    """Return a cached int16 waveform array for ``name``. Builds on first use."""
     key = (name, size)
     w = _cache.get(key)
     if w is None:
@@ -223,10 +223,10 @@ def get_wave_2x(name, size=256, volume=28000):
 
 
 def random_phase_wave(name, size=256, volume=28000):
-    """One cycle of `name`, starting at a random point in its cycle.
+    """One cycle of ``name``, starting at a random point in its cycle.
 
     Unlike get_wave()/get_wave_2x(), this is NOT cached -- every call slices
-    a fresh `size`-sample window out of the shared 2x buffer at a random
+    a fresh ``size``-sample window out of the shared 2x buffer at a random
     offset, so the returned array differs call to call. That makes it a
     per-note-on cost: one array copy, the same tier as building a fresh
     synthio.Note or Biquad at press time, not a per-sample one. Call it once
@@ -277,8 +277,8 @@ def ramp_wave():
 
 def _curve_ramp(start, stop, n, curve):
     """Normalized ramp start -> stop over n points, raised to the integer
-    power `curve`. Repeated multiply rather than `**`: elementwise float
-    multiply is already proven on ulab, `**` is not.
+    power ``curve``. Repeated multiply rather than ``**``: elementwise float
+    multiply is already proven on ulab, ``**`` is not.
 
     For start/stop in [0,1] the result stays in [0,1], so scaling by
     ENV_PEAK cannot leave int16 range. Call it descending (1.0 -> 0) to get
@@ -302,15 +302,15 @@ def _clamp_curve(curve):
 def fill_env_rise(buf, curve=1):
     """Rise 0 -> ENV_PEAK across the WHOLE buffer, shaped 1 - (1-t)^curve.
 
-    `curve` is an integer exponent: 1 = linear, 2+ = increasingly
+    ``curve`` is an integer exponent: 1 = linear, 2+ = increasingly
     fast-start, easing into the peak. That shape is chosen for what it does
     at the OTHER end. The release reruns this same buffer through a
-    CONSTRAINED_LERP with swapped endpoints, i.e. `V * (1 - s(t))`, so
+    CONSTRAINED_LERP with swapped endpoints, i.e. ``V * (1 - s(t))``, so
 
         s(t) = 1 - (1-t)^curve   =>   release = V * (1-t)^curve
 
     which is the conventional decay: quick initial drop, long tail. The
-    obvious alternative, s(t) = t^curve, makes the release `V * (1 - t^curve)`
+    obvious alternative, s(t) = t^curve, makes the release ``V * (1 - t^curve)``
     -- still at 75% of its value halfway through at curve=2, hanging near the
     top and then falling off a cliff. A mirrored attack, not a decay.
 
@@ -320,7 +320,7 @@ def fill_env_rise(buf, curve=1):
     rise; sharing one buffer means the release gets the casting vote.
 
     There is deliberately no hold segment and no second, falling buffer:
-      - the hold is what `once=True` already does after the last sample
+      - the hold is what ``once=True`` already does after the last sample
         (measured on device: a one-shot LFO reads 0.9999 at both 0.5s and
         1.5s after a 0.2s rise), so writing a plateau here would only shorten
         the rise and force the release rate to compensate for it;
@@ -377,10 +377,10 @@ class Waves:
 
     @staticmethod
     def make_waveform(waveid, size=256, volume=32767):
-        """Return a waveform by string name, one of `waveform_types`.
+        """Return a waveform by string name, one of ``waveform_types``.
 
-        Delegates to `get_wave()` for the types it also builds, rather than
-        generating them a second way; SIL has no `get_wave` equivalent and
+        Delegates to ``get_wave()`` for the types it also builds, rather than
+        generating them a second way; SIL has no ``get_wave`` equivalent and
         stays local.
         """
         waveid = waveid.upper()
@@ -404,7 +404,7 @@ class Waves:
 
     @staticmethod
     def triangle(size, min_vol, max_vol):
-        """Triangle waveform. `get_wave`'s TRI is symmetric about 0, so this
+        """Triangle waveform. ``get_wave``'s TRI is symmetric about 0, so this
         only delegates when min_vol/max_vol are the usual +-volume pair."""
         if min_vol == -max_vol:
             return get_wave("TRI", size, max_vol)
