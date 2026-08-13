@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: MIT
 #
 # ahr_envelope_bend_demo.py -- AHREnvelope wired straight to Note.bend, with
-# nothing else from synth_tools in the way: just synthio.Synthesizer and
+# nothing else from synthtools in the way: just synthio.Synthesizer and
 # synthio.Note. No Patch, no SubtractiveSynth.
 #
-# Copy flat onto CIRCUITPY beside synth_setup.py and the synth_tools/
+# Copy flat onto CIRCUITPY beside synth_setup.py and the synthtools/
 # package, then either rename it code.py or, from the serial REPL:
 #
 #     import ahr_envelope_bend_demo
@@ -54,7 +54,7 @@ import time
 import synthio
 
 from synth_setup import synth
-from synth_tools.ahr_envelope import AHREnvelope
+from synthtools.ahr_envelope import AHREnvelope
 
 penv = AHREnvelope(
     attack=0.7,  # seconds to ease from `amount` down to true pitch

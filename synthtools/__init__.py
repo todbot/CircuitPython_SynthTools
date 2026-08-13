@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: MIT
 """
-`synth_tools`
+`synthtools`
 ================================================================================
 
 CircuitPython helper library to do help doing synthio
@@ -31,8 +31,8 @@ from .subtractive_synth import SubtractiveSynth
 
 # wavetable_synth needs the adafruit_wave library; don't break the whole
 # package if it isn't installed. Import it directly if you want it:
-#     from synth_tools.wavetable import Wavetable
-#     from synth_tools.wavetable_synth import WavetableSynth
+#     from synthtools.wavetable import Wavetable
+#     from synthtools.wavetable_synth import WavetableSynth
 try:
     from .wavetable import Wavetable
     from .wavetable_synth import WavetableSynth

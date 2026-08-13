@@ -4,7 +4,7 @@
 # synthinst_wave_demo.py -- play waves from waves.py, back to back,
 # each played as a short arpeggio with and without oscillator detune.
 #
-# Copy flat onto CIRCUITPY beside synth_setup.py and the synth_tools/
+# Copy flat onto CIRCUITPY beside synth_setup.py and the synthtools/
 # package (plus arpeggiator.py, also copied flat), then either rename it
 # code.py or, from the serial REPL:
 #
@@ -24,8 +24,8 @@
 import time
 
 from synth_setup import synth as engine
-from synth_tools import Patch, SubtractiveSynth
-from synth_tools.waves import wave_names
+from synthtools import Patch, SubtractiveSynth
+from synthtools.waves import wave_names
 from arpeggiator import Arpeggiator
 
 DURATION = 3.0  # seconds per wave 

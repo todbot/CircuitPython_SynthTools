@@ -7,7 +7,7 @@
 
 `TrigSequencer` is a trigger-based (drum) sequencer for rhythmic events.
 
-Part of synth_tools.
+Part of synthtools.
 
 """
 

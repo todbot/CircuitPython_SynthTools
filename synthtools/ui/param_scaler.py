@@ -14,7 +14,7 @@ move in sync with the knob.  The value will always decrease/increase
 in the same direction as the knob.
 This mirrors how the Deluge synth's "SCALE" mode works.
 
-Part of synth_tools.
+Part of synthtools.
 
 """
 

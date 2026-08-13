@@ -3,7 +3,7 @@
 #
 # synthinst_pad_demo.py -- slow filter sweeps under sustained chords.
 #
-# Copy flat onto CIRCUITPY beside synth_setup.py and the synth_tools/ package,
+# Copy flat onto CIRCUITPY beside synth_setup.py and the synthtools/ package,
 # then either rename it code.py or, from the serial REPL:
 #
 #     import synthinst_pad_demo
@@ -39,7 +39,7 @@
 import time
 
 from synth_setup import synth as engine
-from synth_tools import Patch, SubtractiveSynth
+from synthtools import Patch, SubtractiveSynth
 
 patch = Patch(
     name="slowpad",

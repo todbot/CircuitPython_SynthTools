@@ -49,3 +49,6 @@ _build
 
 # todstuff
 tmp
+
+# not ready for tracking/CI yet
+docs/diagrams/

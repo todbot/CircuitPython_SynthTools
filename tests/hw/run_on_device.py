@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
+# SPDX-License-Identifier: MIT
 """Run a snippet on a CircuitPython board over the serial REPL.
 
     python3 cpy.py snippet.py [--port /dev/tty.usbmodem11201] [--timeout 20]

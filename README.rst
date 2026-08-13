@@ -2,8 +2,8 @@ Introduction
 ============
 
 
-.. image:: https://readthedocs.org/projects/circuitpython-synth-tools/badge/?version=latest
-    :target: https://circuitpython-synth-tools.readthedocs.io/
+.. image:: https://readthedocs.org/projects/circuitpython-synthtools/badge/?version=latest
+    :target: https://circuitpython-synthtools.readthedocs.io/
     :alt: Documentation Status
 
 
@@ -18,9 +18,9 @@ Introduction
     :alt: Build Status
 
 
-.. image:: https://img.shields.io/badge/code%20style-black-000000.svg
-    :target: https://github.com/psf/black
-    :alt: Code Style: Black
+.. image:: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json
+    :target: https://github.com/astral-sh/ruff
+    :alt: Code Style: Ruff
 
 CircuitPython helper library to do help doing synthio
 
@@ -43,18 +43,18 @@ Installing from PyPI
    as a standard element. Stay tuned for PyPI availability!
 
 On supported GNU/Linux systems like the Raspberry Pi, you can install the driver locally `from
-PyPI <https://pypi.org/project/circuitpython-synth-tools/>`_.
+PyPI <https://pypi.org/project/circuitpython-synthtools/>`_.
 To install for current user:
 
 .. code-block:: shell
 
-    pip3 install circuitpython-synth-tools
+    pip3 install circuitpython-synthtools
 
 To install system-wide (this may be required in some cases):
 
 .. code-block:: shell
 
-    sudo pip3 install circuitpython-synth-tools
+    sudo pip3 install circuitpython-synthtools
 
 To install in a virtual environment in your current project:
 
@@ -63,7 +63,7 @@ To install in a virtual environment in your current project:
     mkdir project-name && cd project-name
     python3 -m venv .venv
     source .env/bin/activate
-    pip3 install circuitpython-synth-tools
+    pip3 install circuitpython-synthtools
 
 Installing to a Connected CircuitPython Device with Circup
 ==========================================================
@@ -80,7 +80,7 @@ following command to install:
 
 .. code-block:: shell
 
-    circup install synth_tools
+    circup install synthtools
 
 Or the following command to update an existing version:
 
@@ -94,7 +94,7 @@ Usage Example
 
 Documentation
 =============
-API documentation for this library can be found on `Read the Docs <https://circuitpython-synth-tools.readthedocs.io/>`_.
+API documentation for this library can be found on `Read the Docs <https://circuitpython-synthtools.readthedocs.io/>`_.
 
 For information on building library documentation, please check out
 `this guide <https://learn.adafruit.com/creating-and-sharing-a-circuitpython-library/sharing-our-docs-on-readthedocs#sphinx-5-1>`_.

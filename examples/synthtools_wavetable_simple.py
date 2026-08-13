@@ -5,7 +5,7 @@ import time
 import ulab.numpy as np
 import synthio
 from synth_setup import synth, knobA
-from synth_tools.wavetable import Wavetable
+from synthtools.wavetable import Wavetable
 
 wavetable_fname = "/wavetables/PLAITS02.WAV"  # from http://waveeditonline.com/
 

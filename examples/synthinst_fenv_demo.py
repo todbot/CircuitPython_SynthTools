@@ -1,9 +1,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
 # SPDX-License-Identifier: MIT
 #
-# synthinst_fenv_demo.py -- the synth_tools AHR filter envelope, audibly.
+# synthinst_fenv_demo.py -- the synthtools AHR filter envelope, audibly.
 #
-# Copy flat onto CIRCUITPY beside synth_setup.py and the synth_tools/ package,
+# Copy flat onto CIRCUITPY beside synth_setup.py and the synthtools/ package,
 # then either rename it code.py or, from the serial REPL:
 #
 #     import synthinst_fenv_demo
@@ -15,7 +15,7 @@
 import time
 
 from synth_setup import synth as engine
-from synth_tools import Patch, SubtractiveSynth
+from synthtools import Patch, SubtractiveSynth
 
 # --- a patch built around the filter envelope ---------------------------
 patch = Patch(

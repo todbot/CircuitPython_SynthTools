@@ -1,9 +1,12 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
+# SPDX-License-Identifier: MIT
+
 import time
 import synthio
 
 from synth_setup import synth as engine, mixer
-from synth_tools import Patch, SubtractiveSynth
-from synth_tools.ahr_envelope import AHREnvelope
+from synthtools import Patch, SubtractiveSynth
+from synthtools.ahr_envelope import AHREnvelope
 
 mixer.voice[0].level = 0.0          # verify the block graph, don't make noise
 

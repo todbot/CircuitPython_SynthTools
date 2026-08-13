@@ -3,7 +3,7 @@
 
 import time
 from synth_setup import synth as engine
-from synth_tools import Patch, SubtractiveSynth
+from synthtools import Patch, SubtractiveSynth
 
 # --- a patch, and a synth to put it on -----------------------------------
 patch1 = Patch(name="fat bass", wave="ASAW", detune=1.004,

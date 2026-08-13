@@ -1,11 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
 # SPDX-License-Identifier: MIT
 
-# code.py - synth_tools instrument demo for RP2040-class boards, CircuitPython 10+
+# code.py - synthtools instrument demo for RP2040-class boards, CircuitPython 10+
 import time
 from synth_setup import synth as engine
-from synth_tools import Patch, SubtractiveSynth
-from synth_tools.wavetable_synth import WavetableSynth   # needs adafruit_wave
+from synthtools import Patch, SubtractiveSynth
+from synthtools.wavetable_synth import WavetableSynth   # needs adafruit_wave
 
 
 # --- a patch, and a synth to put it on -----------------------------------

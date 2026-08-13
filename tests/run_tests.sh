@@ -1,5 +1,8 @@
 #!/bin/sh
-# Run the synth_tools test suite under every interpreter available.
+# SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
+# SPDX-License-Identifier: MIT
+#
+# Run the synthtools test suite under every interpreter available.
 #
 # There is no pytest here on purpose: the library targets CircuitPython, so
 # the tests are plain scripts that exit non-zero on failure and can run on

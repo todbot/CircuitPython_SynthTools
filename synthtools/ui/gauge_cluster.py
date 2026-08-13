@@ -7,7 +7,7 @@
 
 A group of `displayio` objects that display a list of values graphically.
 
-Part of synth_tools.
+Part of synthtools.
 
 """
 

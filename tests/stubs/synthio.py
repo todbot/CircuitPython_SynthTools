@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
+# SPDX-License-Identifier: MIT
 """Minimal synthio stub: enough to exercise block identity, sharing, param
 routing and the AHR envelope wiring. No DSP."""
 
@@ -15,7 +17,7 @@ class FilterMode:
 
 
 class MathOperation:
-    """Only the operations synth_tools' engine actually uses. Definitions are
+    """Only the operations synthtools' engine actually uses. Definitions are
     copied from the real synthio docs so the arithmetic matches the device."""
     SUM = "SUM"                            # a+b+c
     PRODUCT = "PRODUCT"                    # a*b*c

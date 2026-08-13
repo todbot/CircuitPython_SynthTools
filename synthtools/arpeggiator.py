@@ -7,7 +7,7 @@
 
 `Arpeggiator` is a melodic arpeggiator / sequencer for musical events
 
-Part of synth_tools.
+Part of synthtools.
 
 """
 

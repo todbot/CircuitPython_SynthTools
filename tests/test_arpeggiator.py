@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
+# SPDX-License-Identifier: MIT
 """Arpeggiator checks -- timing/sequencing logic plus a regression test
 for the constructor bug fixed alongside this file: Arpeggiator.__init__
 called `self.set_bpm(120)` with no rate, which overwrote self.rate with
@@ -15,7 +17,7 @@ exact and instant instead of racing real wall-clock sleeps.
 import sys
 
 _D = __file__.rsplit("/", 1)[0] if "/" in __file__ else "."
-sys.path.insert(0, _D + "/../synth_tools")  # direct: skips synth_tools/__init__
+sys.path.insert(0, _D + "/../synthtools")  # direct: skips synthtools/__init__
 
 import arpeggiator  # noqa: E402
 from arpeggiator import Arpeggiator  # noqa: E402

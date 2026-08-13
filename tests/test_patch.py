@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
+# SPDX-License-Identifier: MIT
 """Patch round-trip checks -- the one module that needs no stubs at all.
 
 patch.py imports only `json`, so this runs on a bare interpreter and is
@@ -12,7 +14,7 @@ keywords).
 import sys
 
 _D = __file__.rsplit("/", 1)[0] if "/" in __file__ else "."
-sys.path.insert(0, _D + "/../synth_tools")   # direct: skips synth_tools/__init__
+sys.path.insert(0, _D + "/../synthtools")   # direct: skips synthtools/__init__
 
 from patch import Patch, save_patches, load_patches  # noqa: E402
 

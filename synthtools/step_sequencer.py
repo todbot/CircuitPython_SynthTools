@@ -7,7 +7,7 @@
 
 `StepSequencer` is a note-based sequencer for musical events.
 
-Part of synth_tools.
+Part of synthtools.
 
 """
 

@@ -1,9 +1,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
 # SPDX-License-Identifier: MIT
 #
-# synthinst_pitch_demo.py -- synth_tools' pitch modulation, audibly.
+# synthinst_pitch_demo.py -- synthtools' pitch modulation, audibly.
 #
-# Copy flat onto CIRCUITPY beside synth_setup.py and the synth_tools/ package,
+# Copy flat onto CIRCUITPY beside synth_setup.py and the synthtools/ package,
 # then either rename it code.py or, from the serial REPL:
 #
 #     import synthinst_pitch_demo
@@ -34,7 +34,7 @@
 import time
 
 from synth_setup import synth as engine
-from synth_tools import Patch, SubtractiveSynth
+from synthtools import Patch, SubtractiveSynth
 
 patch = Patch(
     name="bender",

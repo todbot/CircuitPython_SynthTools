@@ -13,7 +13,7 @@ when the Param is changed.
 A `ParamChoice` is a Param with a list of options to choose from and
 a setter function to update when the Param is changed.
 
-Part of synth_tools.
+Part of synthtools.
 
 """
 

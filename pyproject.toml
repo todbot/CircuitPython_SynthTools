@@ -11,7 +11,7 @@ requires = [
 ]
 
 [project]
-name = "circuitpython-synth-tools"
+name = "circuitpython-synthtools"
 description = "CircuitPython helper library to do help doing synthio"
 version = "0.0.0+auto.0"
 readme = "README.rst"
@@ -24,7 +24,7 @@ keywords = [
     "blinka",
     "circuitpython",
     "micropython",
-    "synth_tools",
+    "synthtools",
     "synth",
     "synthio",
     "synthesizer",
@@ -47,8 +47,8 @@ dynamic = ["dependencies", "optional-dependencies"]
 [tool.setuptools]
 # TODO: IF LIBRARY FILES ARE A PACKAGE FOLDER,
 #       CHANGE `py_modules = ['...']` TO `packages = ['...']`
-#py-modules = ["synth_tools"]
-packages = ["synth_tools"]
+#py-modules = ["synthtools"]
+packages = ["synthtools"]
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
