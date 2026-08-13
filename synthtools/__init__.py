@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: MIT
 """
-`synth_tools`
+`synthtools`
 ================================================================================
 
 CircuitPython helper library to do help doing synthio
@@ -25,5 +25,19 @@ Implementation Notes
 
 # imports
 
+from .patch import Patch, load_patches, save_patches
+from .subtractive_synth import SubtractiveSynth
+from .synth import Synth
+
+# wavetable_synth needs the adafruit_wave library; don't break the whole
+# package if it isn't installed. Import it directly if you want it:
+#     from synthtools.wavetable import Wavetable
+#     from synthtools.wavetable_synth import WavetableSynth
+try:
+    from .wavetable import Wavetable
+    from .wavetable_synth import WavetableSynth
+except ImportError:
+    pass
+
 __version__ = "0.0.0+auto.0"
-__repo__ = "https://github.com/todbot/CircuitPython_Synth_Tools.git"
+__repo__ = "https://github.com/todbot/CircuitPython_SynthTools.git"

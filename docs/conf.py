@@ -21,11 +21,13 @@ extensions = [
     "sphinx.ext.todo",
 ]
 
-# TODO: Please Read!
-# Uncomment the below if you use native CircuitPython modules such as
-# digitalio, micropython and busio. List the modules you use. Without it, the
-# autodoc module docs will fail to generate with a warning.
-# autodoc_mock_imports = ["digitalio", "busio"]
+# synthtools/__init__.py now imports the engine (synth.py etc.), which pulls
+# in synthio and ulab at import time -- neither exists off-device, so autodoc
+# needs mocks or it fails to import the package at all. adafruit_wave is
+# optional at runtime (synthtools/__init__.py already guards it with
+# try/except ImportError) but still needs mocking here since the docs build
+# has no real one installed either.
+autodoc_mock_imports = ["synthio", "ulab", "adafruit_wave"]
 
 autodoc_preserve_defaults = True
 
@@ -47,7 +49,7 @@ source_suffix = ".rst"
 master_doc = "index"
 
 # General information about the project.
-project = "CircuitPython Synth_Tools Library"
+project = "CircuitPython Synthtools Library"
 creation_year = "2024"
 current_year = str(datetime.datetime.now().year)
 year_duration = (
@@ -119,6 +121,9 @@ html_theme = "sphinx_rtd_theme"
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
 
+# Include extra css to work around rtd theme glitches
+html_css_files = ["custom.css"]
+
 # The name of an image file (relative to this directory) to use as a favicon of
 # the docs.  This file should be a Windows icon file (.ico) being 16x16 or 32x32
 # pixels large.
@@ -126,7 +131,7 @@ html_static_path = ["_static"]
 html_favicon = "_static/favicon.ico"
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = "CircuitPython_Synth_tools_Librarydoc"
+htmlhelp_basename = "CircuitPython_Synthtools_Librarydoc"
 
 # -- Options for LaTeX output ---------------------------------------------
 
@@ -147,8 +152,8 @@ latex_elements = {
 latex_documents = [
     (
         master_doc,
-        "CircuitPython_Synth_Tools_Library.tex",
-        "CircuitPython Synth_Tools Library Documentation",
+        "CircuitPython_Synthtools_Library.tex",
+        "CircuitPython Synthtools Library Documentation",
         author,
         "manual",
     ),
@@ -161,8 +166,8 @@ latex_documents = [
 man_pages = [
     (
         master_doc,
-        "CircuitPython_Synth_Tools_Library",
-        "CircuitPython Synth_Tools Library Documentation",
+        "CircuitPython_Synthtools_Library",
+        "CircuitPython Synthtools Library Documentation",
         [author],
         1,
     ),
@@ -176,10 +181,10 @@ man_pages = [
 texinfo_documents = [
     (
         master_doc,
-        "CircuitPython_Synth_Tools_Library",
-        "CircuitPython Synth_Tools Library Documentation",
+        "CircuitPython_Synthtools_Library",
+        "CircuitPython Synthtools Library Documentation",
         author,
-        "CircuitPython_Synth_Tools_Library",
+        "CircuitPython_Synthtools_Library",
         "One line description of project.",
         "Miscellaneous",
     ),

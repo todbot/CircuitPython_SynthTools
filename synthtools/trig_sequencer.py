@@ -2,12 +2,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2023 Tod Kurt
 # SPDX-License-Identifier: MIT
 """
-`trig_sequencer`
+``trig_sequencer``
 ================================================================================
 
-`TrigSequencer` is a trigger-based (drum) sequencer for rhythmic events.
+``TrigSequencer`` is a trigger-based (drum) sequencer for rhythmic events.
 
-Part of synth_tools.
+Part of synthtools.
 
 """
 
@@ -33,9 +33,7 @@ class TrigSequencer:
     :param function off_func: function to call on trigger end (unused)
     """
 
-    def __init__(
-        self, trig_count, step_count, steps_per_beat, on_func=None, off_func=None
-    ):
+    def __init__(self, trig_count, step_count, steps_per_beat, on_func=None, off_func=None):
         self.trig_count = trig_count
         self.step_count = step_count
         self.steps_per_beat = steps_per_beat

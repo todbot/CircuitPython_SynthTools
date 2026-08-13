@@ -2,12 +2,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2023 Tod Kurt
 # SPDX-License-Identifier: MIT
 """
-`step_sequencer`
+``step_sequencer``
 ================================================================================
 
-`StepSequencer` is a note-based sequencer for musical events.
+``StepSequencer`` is a note-based sequencer for musical events.
 
-Part of synth_tools.
+Part of synthtools.
 
 """
 
@@ -33,9 +33,7 @@ class StepSequencer:
     """
 
     def __init__(self, step_count, steps_per_beat, on_func=None, off_func=None):
-        self.steps_per_beat = (
-            steps_per_beat  # 1 = 1/4 note, 2 = 8th note, 4 = 16th note
-        )
+        self.steps_per_beat = steps_per_beat  # 1 = 1/4 note, 2 = 8th note, 4 = 16th note
         self.step_count = step_count  # how big the sequence is
         self.i = 0  # where in the step sequence we currently are
 

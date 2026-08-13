@@ -2,12 +2,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2023 Tod Kurt
 # SPDX-License-Identifier: MIT
 """
-`arpeggiator`
+``arpeggiator``
 ================================================================================
 
-`Arpeggiator` is a melodic arpeggiator / sequencer for musical events
+``Arpeggiator`` is a melodic arpeggiator / sequencer for musical events
 
-Part of synth_tools.
+Part of synthtools.
 
 """
 
@@ -44,11 +44,17 @@ pattern_names = (
 
 
 class Arpeggiator:
-    """ """
+    """Poll-based arpeggiator: call update() as often as possible.
+
+    Holds a stack of notes added with add_note()/del_note() and steps
+    through them at ``step_millis`` (derived from ``rate`` and bpm, set via
+    set_bpm()), firing ``on_func``/``off_func`` at each gated step. ``rate`` is
+    in notes-per-beat: 1 = quarter notes, 2 = eighths, 4 = sixteenths.
+    """
 
     def __init__(self, rate, on_func=None, off_func=None):
         self.rate = rate  # 1 = 1/4 note, 2 = 1/8th note, 4 = 16th note
-        self.set_bpm(120)  # FIXME
+        self.set_bpm(120, rate)
         self.oct_distance = 12  # distance between repeats  (Ableton nomenclature)
         self.oct_range = 1  # max number of self.distance to do (Ableton nomenclature)
         self.octave = 0  # which arp step we're on, this is confusing with above

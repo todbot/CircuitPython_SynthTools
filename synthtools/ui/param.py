@@ -13,7 +13,7 @@ when the Param is changed.
 A `ParamChoice` is a Param with a list of options to choose from and
 a setter function to update when the Param is changed.
 
-Part of synth_tools.
+Part of synthtools.
 
 """
 
@@ -31,9 +31,7 @@ class ParamRange:
     """ParamRange is a Param with a numeric range and setter/getter functions
     to update and set the represented value"""
 
-    def __init__(
-        self, name, fullname, val, fmt, minval, maxval, setter=None, getter=None
-    ):
+    def __init__(self, name, fullname, val, fmt, minval, maxval, setter=None, getter=None):
         self.name = name
         self.fullname = fullname
         self.val = val

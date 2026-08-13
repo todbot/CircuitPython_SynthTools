@@ -2,9 +2,10 @@
 # SPDX-License-Identifier: MIT
 
 import time
+
 import synthio
-from synth_setup import synth, knobA, knobB, keys
-from arpeggiator import Arpeggiator, patterns, pattern_names
+from arpeggiator import Arpeggiator, pattern_names, patterns
+from synth_setup import keys, knobA, knobB, synth
 
 note = None  # note that was pressed during note_on, if any
 
@@ -49,6 +50,4 @@ while True:
 
     if time.monotonic() - last_print_time > 0.5:
         last_print_time = time.monotonic()
-        print(
-            "note=%d oct=%d pattern='%s'" % (root_note, octaves, pattern_names[patt_i])
-        )
+        print("note=%d oct=%d pattern='%s'" % (root_note, octaves, pattern_names[patt_i]))

@@ -5,12 +5,12 @@
 # part of todbot circuitpython synthio tutorial
 # 10 Feb 2025 - @todbot / Tod Kurt
 #
-import board
-import synthio
+import analogio
 import audiobusio
 import audiomixer
+import board
 import keypad
-import analogio
+import synthio
 
 SAMPLE_RATE = 44100
 CHANNEL_COUNT = 2
@@ -25,9 +25,7 @@ i2s_lck_pin = board.GP21
 i2s_dat_pin = board.GP22
 
 # hook up external stereo I2S audio DAC board
-audio = audiobusio.I2SOut(
-    bit_clock=i2s_bck_pin, word_select=i2s_lck_pin, data=i2s_dat_pin
-)
+audio = audiobusio.I2SOut(bit_clock=i2s_bck_pin, word_select=i2s_lck_pin, data=i2s_dat_pin)
 
 # add a mixer to give us a buffer
 mixer = audiomixer.Mixer(
