@@ -9,7 +9,36 @@ synthtools
 
 .. automodule:: synthtools
     :members:
-    :imported-members:
+
+Patch
+=====
+
+.. automodule:: synthtools.patch
+    :members:
+
+Synth
+=====
+
+.. automodule:: synthtools.synth
+    :members:
+
+Subtractive Synth
+==================
+
+.. automodule:: synthtools.subtractive_synth
+    :members:
+
+Wavetable
+=========
+
+.. automodule:: synthtools.wavetable
+    :members:
+
+Wavetable Synth
+================
+
+.. automodule:: synthtools.wavetable_synth
+    :members:
 
 AHR Envelope
 ============
