@@ -37,33 +37,6 @@ This is easily achieved by downloading
 or individual libraries can be installed using
 `circup <https://github.com/adafruit/circup>`_.
 
-Installing from PyPI
-=====================
-.. note:: This library is not available on PyPI yet. Install documentation is included
-   as a standard element. Stay tuned for PyPI availability!
-
-On supported GNU/Linux systems like the Raspberry Pi, you can install the driver locally `from
-PyPI <https://pypi.org/project/circuitpython-synthtools/>`_.
-To install for current user:
-
-.. code-block:: shell
-
-    pip3 install circuitpython-synthtools
-
-To install system-wide (this may be required in some cases):
-
-.. code-block:: shell
-
-    sudo pip3 install circuitpython-synthtools
-
-To install in a virtual environment in your current project:
-
-.. code-block:: shell
-
-    mkdir project-name && cd project-name
-    python3 -m venv .venv
-    source .env/bin/activate
-    pip3 install circuitpython-synthtools
 
 Installing to a Connected CircuitPython Device with Circup
 ==========================================================
@@ -90,6 +63,33 @@ Or the following command to update an existing version:
 
 Usage Example
 =============
+
+.. code-block:: python
+
+    import time
+    from synth_setup import synth as engine
+    from synthtools import Patch, SubtractiveSynth
+
+    patch1 = Patch(name="fat bass", wave="ASAW", detune=1.004,
+                   filt_type="LPF", filt_f=800, filt_q=1.4,
+                   amp_env=[0.01, 0.1, 0.8, 0.4],
+                   vib_rate=5.5, vib_depth=0.0,
+                   # AHR filter envelope: cutoff swings 800 -> 3800 Hz and back
+                   fenv_amount=3000, fenv_attack=0.02, fenv_release=0.30,
+                   # a slow cyclic wobble on top of it (0 = off)
+                   filt_lfo_rate=0.4, filt_lfo_amount=0.3)
+    synth = SubtractiveSynth(engine, patch1)
+    arp = (36, 39, 43, 48)
+    i = 0
+    sweep = 0
+    while True:
+        synth.note_on(arp[i % len(arp)], velocity=110)
+        time.sleep(0.11)
+        synth.note_off(arp[i % len(arp)])
+        time.sleep(0.02)
+        i += 1
+        if i % 32 == 0:  # flip waveforms now and then
+            synth.wave = "ASQU" if synth.wave == "ASAW" else "ASAW"
 
 
 Documentation
