@@ -18,7 +18,7 @@ readme = "README.rst"
 authors = [
     {name = "Tod Kurt", email = "tod@todbot.com"}
 ]
-urls = {Homepage = "https://github.com/todbot/CircuitPython_Synth_Tools"}
+urls = {Homepage = "https://github.com/todbot/CircuitPython_SynthTools"}
 keywords = [
     "adafruit",
     "blinka",

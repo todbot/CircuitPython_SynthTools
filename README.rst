@@ -13,8 +13,8 @@ Introduction
     :alt: Discord
 
 
-.. image:: https://github.com/todbot/CircuitPython_Synth_Tools/workflows/Build%20CI/badge.svg
-    :target: https://github.com/todbot/CircuitPython_Synth_Tools/actions
+.. image:: https://github.com/todbot/CircuitPython_SynthTools/workflows/Build%20CI/badge.svg
+    :target: https://github.com/todbot/CircuitPython_SynthTools/actions
     :alt: Build Status
 
 
@@ -103,5 +103,5 @@ Contributing
 ============
 
 Contributions are welcome! Please read our `Code of Conduct
-<https://github.com/todbot/CircuitPython_Synth_Tools/blob/HEAD/CODE_OF_CONDUCT.md>`_
+<https://github.com/todbot/CircuitPython_SynthTools/blob/HEAD/CODE_OF_CONDUCT.md>`_
 before contributing to help this project stay welcoming.
