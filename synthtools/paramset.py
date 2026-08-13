@@ -5,10 +5,11 @@
 ``param_set.py``
 ================================================================================
 
-``ParamSet`` is a collection of ``Param`` that track normalized knob positions,
-    especially for the case when there are fewer knobs than ``Param``\ s.
+``ParamSet`` is a collection of ``Param`` objects that track normalized
+    knob positions, especially for the case when there are fewer knobs
+    than params.
 
-``Param``\ s are a UI- and implementation-independent way of describing
+Each ``Param`` is a UI- and implementation-independent way of describing
     a named numerical parameter with a min/max, a display format, and
     (optionally) an object attribute that they represent.
 

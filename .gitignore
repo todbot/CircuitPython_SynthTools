@@ -28,6 +28,7 @@
 # Python-specific files
 __pycache__
 *.pyc
+.pytest_cache
 
 # Sphinx build-specific files
 _build
