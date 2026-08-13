@@ -1,15 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
 # SPDX-License-Identifier: MIT
 #
-# synthinst_pitch_demo.py -- synthtools' pitch modulation, audibly.
-#
-# Copy flat onto CIRCUITPY beside synth_setup.py and the synthtools/ package,
-# then either rename it code.py or, from the serial REPL:
-#
-#     import synthinst_pitch_demo
-#
-# Everything that reaches note.bend, one parameter at a time, printing what
-# it just changed. Companion to synthinst_fenv_demo.py.
+# synthinst_pitch_demo.py -- show synthtools Synth pitch modulation
 #
 # --- bend units --------------------------------------------------------
 # 1.0 = ONE OCTAVE. So:

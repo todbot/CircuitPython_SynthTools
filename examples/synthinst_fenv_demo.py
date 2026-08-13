@@ -1,12 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
 # SPDX-License-Identifier: MIT
 #
-# synthinst_fenv_demo.py -- the synthtools AHR filter envelope, audibly.
-#
-# Copy flat onto CIRCUITPY beside synth_setup.py and the synthtools/ package,
-# then either rename it code.py or, from the serial REPL:
-#
-#     import synthinst_fenv_demo
+# synthinst_fenv_demo.py -- show synthtools Synth filter envelope
 #
 # It plays one bass riff over and over, changing a single filter-envelope
 # parameter every few bars and printing what it just changed, so you can
