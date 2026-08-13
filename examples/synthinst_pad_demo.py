@@ -97,6 +97,7 @@ def stagger(label, notes=Am, gap=0.9, secs=5.0, tail=2.8):
     time.sleep(tail)
 
 
+# fmt: off
 while True:
     print()
     print("=== the envelope as slow motion ===")
@@ -120,19 +121,15 @@ while True:
     #    the filter closes as the chord fades, which is most of what makes
     #    a pad sound like it is being played rather than switched off.
     synth.fenv_release = 2.5
-    # fmt: off
     chord("fenv_release=2.5   -- listen past the key release, it closes down",
           secs=4.0, tail=3.5)
-    # fmt: on
 
     # 5. curve. On a plucky note this is nearly inaudible; over 2.5s it is
     #    obvious. 1 is a straight line; 3 snaps open early then eases into
     #    the top, and drops away fast on release with a long tail.
     synth.fenv_curve = 3
-    # fmt: off
     chord("fenv_curve=3       -- same times, front-loaded: opens early",
           secs=6.0, tail=3.5)
-    # fmt: on
     synth.fenv_curve = 1
 
     print()
@@ -146,10 +143,7 @@ while True:
     synth.fenv_amount = 0
     synth.filt_lfo_rate = 0.1
     synth.filt_lfo_amount = 2000
-    # fmt: off
-    chord("filt_lfo 2000 @ 0.1Hz -- one slow sweep up and back, no envelope",
-          secs=12.0)
-    # fmt: on
+    chord("filt_lfo 2000 @ 0.1Hz -- one slow sweep up & back, no envelope", secs=12.0)
 
     # 7. both at once. The envelope opens it on the attack, the LFO keeps
     #    it moving afterwards -- they SUM on one cutoff, so the envelope's
@@ -157,10 +151,8 @@ while True:
     synth.fenv_amount = 3000
     synth.filt_lfo_amount = 2500
     synth.filt_lfo_rate = 0.12
-    # fmt: off
     chord("fenv + slow LFO    -- envelope opens it, LFO keeps it breathing",
           secs=12.0)
-    # fmt: on
     synth.filt_lfo_amount = 0
     synth.fenv_amount = 5000
 
@@ -172,10 +164,8 @@ while True:
     #    different brightness and they pull apart as the chord opens.
     #    A single global envelope could not do this.
     synth.fenv_vel = 1.0
-    # fmt: off
     chord("fenv_vel=1.0       -- one chord, four velocities, four sweeps",
           vels=(40, 70, 100, 127), secs=8.0)
-    # fmt: on
     synth.fenv_vel = 0.0
 
     # 9. The same point in time rather than in depth: notes entering 0.9s
