@@ -92,6 +92,26 @@ Usage Example
             synth.wave = "ASQU" if synth.wave == "ASAW" else "ASAW"
 
 
+What's Included
+===============
+
+* ``Synth`` / ``SubtractiveSynth`` / ``WavetableSynth`` -- the synth engines:
+  shared voice, patch, and modulation handling, plus a subtractive
+  (two-oscillator) and a wavetable-playback style
+* ``Patch`` -- inert, JSON-able patch data; save/load with
+  ``save_patches()`` / ``load_patches()``
+* ``Wavetable`` -- loads a wavetable WAV file and lerps between frames
+* ``AHREnvelope`` -- shared-block attack/release envelope, used for both
+  the filter and pitch envelopes
+* ``Waves`` -- waveform factory (saw, square, sine, triangle, noise, and
+  "analog" variants)
+* ``Arpeggiator`` / ``StepSequencer`` / ``TrigSequencer`` -- poll-based
+  sequencers with on/off callbacks
+* ``Param`` / ``ParamSet`` -- knob-pickup and scaling for UIs with fewer
+  knobs than parameters
+* ``Glider`` -- portamento on ``note.bend``
+* ``RollingAverage`` -- moving-average smoothing for noisy knob reads
+
 Documentation
 =============
 API documentation for this library can be found on `Read the Docs <https://circuitpython-synthtools.readthedocs.io/>`_.
