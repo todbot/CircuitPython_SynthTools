@@ -22,7 +22,7 @@ Introduction
     :target: https://github.com/astral-sh/ruff
     :alt: Code Style: Ruff
 
-CircuitPython helper library to do help doing synthio
+CircuitPython library with tools for making synths with synthio
 
 
 Dependencies
