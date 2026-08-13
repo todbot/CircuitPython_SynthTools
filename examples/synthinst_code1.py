@@ -1,35 +1,24 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
+# SPDX-License-Identifier: MIT
+
 # code.py - synth_tools instrument demo for RP2040-class boards, CircuitPython 10+
 import time
-import board
-import synthio
-import audiomixer
-import audiopwmio  # or audiobusio for I2S
-
+from synth_setup import synth as engine
 from synth_tools import Patch, SubtractiveSynth
-# from synth_tools.wavetable_synth import WavetableSynth   # needs adafruit_wave
+from synth_tools.wavetable_synth import WavetableSynth   # needs adafruit_wave
 
-# --- audio setup ---------------------------------------------------------
-audio = audiopwmio.PWMAudioOut(board.GP10)
-# audio = audiobusio.I2SOut(bit_clock=board.GP11, word_select=board.GP12,
-#                           data=board.GP10)
-mixer = audiomixer.Mixer(sample_rate=44100, channel_count=1,
-                         buffer_size=2048)  # bigger buffer = fewer glitches
-audio.play(mixer)
-synth_engine = synthio.Synthesizer(sample_rate=44100)
-mixer.voice[0].play(synth_engine)
-mixer.voice[0].level = 0.75
 
 # --- a patch, and a synth to put it on -----------------------------------
-patch = Patch(name="fat bass", wave="SAW", detune=1.004,
+patch = Patch(name="fat bass", wave="ASAW", detune=1.004,
               filt_type="LPF", filt_f=800, filt_q=1.4,
               amp_env=[0.01, 0.1, 0.7, 0.4],
               vib_rate=5.5, vib_depth=0.0,
               # AHR filter envelope: cutoff swings 800 -> 3800 Hz and back
               fenv_amount=3000, fenv_attack=0.02, fenv_release=0.30,
               # a slow cyclic wobble on top of it (0 = off)
-              filt_lfo_rate=0.4, filt_lfo_amount=0)
+              filt_lfo_rate=0.4, filt_lfo_amount=0.3)
 
-synth = SubtractiveSynth(synth_engine, patch)
+synth = SubtractiveSynth(engine, patch)
 
 # JSON round-trip (saving to CIRCUITPY needs storage.remount from boot.py):
 patch_json = patch.to_json()
@@ -60,7 +49,7 @@ while True:
         synth.filt_f = new_f
 
     if i % 32 == 0:  # flip waveforms now and then
-        synth.wave = "SQU" if synth.wave == "SAW" else "SAW"
+        synth.wave = "ASQU" if synth.wave == "ASAW" else "ASAW"
 
     # all O(1), all reach sounding voices:
     #   synth.vib_depth = 0.006        # ~10 cents of vibrato
