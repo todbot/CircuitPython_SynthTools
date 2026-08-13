@@ -33,9 +33,7 @@ class TrigSequencer:
     :param function off_func: function to call on trigger end (unused)
     """
 
-    def __init__(
-        self, trig_count, step_count, steps_per_beat, on_func=None, off_func=None
-    ):
+    def __init__(self, trig_count, step_count, steps_per_beat, on_func=None, off_func=None):
         self.trig_count = trig_count
         self.step_count = step_count
         self.steps_per_beat = steps_per_beat

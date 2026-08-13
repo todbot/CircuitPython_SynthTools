@@ -6,9 +6,10 @@
 # microcontroller.cpu.frequency = 200_000_000
 
 import time
+
 import audiocore
 import audiomixer
-from synth_setup import audio, SAMPLE_RATE, BUFFER_SIZE
+from synth_setup import BUFFER_SIZE, SAMPLE_RATE, audio
 from trig_sequencer import TrigSequencer
 
 bpm = 120
@@ -49,9 +50,7 @@ mixer = audiomixer.Mixer(
 )
 audio.play(mixer)
 
-seq = TrigSequencer(
-    trig_count, step_count, steps_per_beat, on_func=trig_on, off_func=trig_off
-)
+seq = TrigSequencer(trig_count, step_count, steps_per_beat, on_func=trig_on, off_func=trig_off)
 seq.bpm = bpm
 seq.set_pattern(drum_pattern1)
 seq.set_drum_map(drum_map)

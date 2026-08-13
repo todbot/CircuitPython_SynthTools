@@ -34,6 +34,7 @@
 import time
 
 from synth_setup import synth as engine
+
 from synthtools import Patch, SubtractiveSynth
 
 patch = Patch(
@@ -140,11 +141,9 @@ while True:
     #    starts from silence, so each of these retriggers.
     synth.vib_depth = 0.06
     synth.vib_delay = 0.0
-    hold("vib_delay=0        -- A: vibrato present from the first instant",
-         secs=2.5)
+    hold("vib_delay=0        -- A: vibrato present from the first instant", secs=2.5)
     synth.vib_delay = 2.0
-    hold("vib_delay=2.0      -- B: dead straight for 2s, THEN it swells in",
-         secs=5.0)
+    hold("vib_delay=2.0      -- B: dead straight for 2s, THEN it swells in", secs=5.0)
 
     # 6. and off again. Everything after this is the pitch ENVELOPE, which
     #    is also pitch movement -- so the vibrato has to be gone or the two
@@ -220,12 +219,12 @@ while True:
     synth.note_on(52, velocity=110)
     STEPS = 80
     for i in range(STEPS):
-        p = 4.0 * i / STEPS          # 0 -> 4
-        if p < 1.0:                  # up to +1
+        p = 4.0 * i / STEPS  # 0 -> 4
+        if p < 1.0:  # up to +1
             b = p
-        elif p < 3.0:                # +1 down through 0 to -1
+        elif p < 3.0:  # +1 down through 0 to -1
             b = 2.0 - p
-        else:                        # -1 back to 0
+        else:  # -1 back to 0
             b = p - 4.0
         synth.pitch_bend(0.15 * b)
         time.sleep(0.03)

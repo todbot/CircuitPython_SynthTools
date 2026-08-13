@@ -16,6 +16,7 @@
 # it just to build a waveform buffer.
 
 import random
+
 import ulab.numpy as np
 
 _cache = {}  # (name, size) -> np.array
@@ -27,25 +28,29 @@ def _saw(size, vol):
 
 def _squ(size, vol):
     h = size // 2
-    return np.concatenate((np.ones(h, dtype=np.int16) * vol,
-                           np.ones(size - h, dtype=np.int16) * -vol))
+    return np.concatenate(
+        (np.ones(h, dtype=np.int16) * vol, np.ones(size - h, dtype=np.int16) * -vol)
+    )
 
 
 def _sin(size, vol):
     return np.array(
-        np.sin(np.linspace(0, 2 * np.pi, num=size, endpoint=False)) * vol,
-        dtype=np.int16)
+        np.sin(np.linspace(0, 2 * np.pi, num=size, endpoint=False)) * vol, dtype=np.int16
+    )
 
 
 def _tri(size, vol):
     h = size // 2
-    return np.concatenate((np.linspace(-vol, vol, num=h, dtype=np.int16),
-                           np.linspace(vol, -vol, num=size - h, dtype=np.int16)))
+    return np.concatenate(
+        (
+            np.linspace(-vol, vol, num=h, dtype=np.int16),
+            np.linspace(vol, -vol, num=size - h, dtype=np.int16),
+        )
+    )
 
 
 def _nze(size, vol):
-    return np.array([random.randint(-vol, vol) for _ in range(size)],
-                    dtype=np.int16)
+    return np.array([random.randint(-vol, vol) for _ in range(size)], dtype=np.int16)
 
 
 # --- hand-drawn "analog" waveforms, ported from the Mozzi Arduino synth
@@ -173,11 +178,11 @@ def _ssqu(size, vol):
 
 
 _builders = {
-    "SAW": _saw,    # plain formula sawtooth
-    "SQU": _squ,    # plain formula square
-    "SIN": _sin,    # plain formula sine
-    "TRI": _tri,    # plain formula triangle
-    "NZE": _nze,    # white noise, resampled fresh every call
+    "SAW": _saw,  # plain formula sawtooth
+    "SQU": _squ,  # plain formula square
+    "SIN": _sin,  # plain formula sine
+    "TRI": _tri,  # plain formula triangle
+    "NZE": _nze,  # white noise, resampled fresh every call
     "ASAW": _asaw,  # Mozzi hand-drawn "analog" saw, wobbly decay
     "ATRI": _atri,  # Mozzi hand-drawn "analog" triangle
     "ASQU": _asqu,  # Mozzi hand-drawn "analog" square, rippled plateaus
@@ -228,7 +233,7 @@ def random_phase_wave(name, size=256, volume=28000):
     per oscillator per note-on, not from a hot path."""
     wave2x = get_wave_2x(name, size, volume)
     start = random.randint(0, size - 1)
-    return wave2x[start:start + size]
+    return wave2x[start : start + size]
 
 
 # --- envelope shapes for one-shot LFOs -------------------------------
@@ -336,23 +341,29 @@ def fill_env_rise(buf, curve=1):
         # Array-times-scalar and array-plus-scalar are both fine.
         # Endpoints stay exact for any curve because linspace pins its last
         # element: (1-t) is exactly 1.0 at index 0 and exactly 0.0 at the end.
-        buf[:] = np.array(
-            _curve_ramp(1.0, 0.0, n, curve) * (-ENV_PEAK) + ENV_PEAK,
-            dtype=np.int16)
+        buf[:] = np.array(_curve_ramp(1.0, 0.0, n, curve) * (-ENV_PEAK) + ENV_PEAK, dtype=np.int16)
 
 
 # --- Waves: string-keyed factory + WAV loading, for interactive use ---
 
 _NAME_ALIASES = {
-    "SIN": "SIN", "SINE": "SIN",
-    "SQU": "SQU", "SQUARE": "SQU",
+    "SIN": "SIN",
+    "SINE": "SIN",
+    "SQU": "SQU",
+    "SQUARE": "SQU",
     "SAW": "SAW",
-    "TRI": "TRI", "TRIANGLE": "TRI",
-    "NZE": "NZE", "NOISE": "NZE",
-    "ASAW": "ASAW", "ANALOG_SAW": "ASAW",
-    "ATRI": "ATRI", "ANALOG_TRI": "ATRI",
-    "ASQU": "ASQU", "ANALOG_SQU": "ASQU",
-    "SSQU": "SSQU", "SMOOTH_SQU": "SSQU",
+    "TRI": "TRI",
+    "TRIANGLE": "TRI",
+    "NZE": "NZE",
+    "NOISE": "NZE",
+    "ASAW": "ASAW",
+    "ANALOG_SAW": "ASAW",
+    "ATRI": "ATRI",
+    "ANALOG_TRI": "ATRI",
+    "ASQU": "ASQU",
+    "ANALOG_SQU": "ASQU",
+    "SSQU": "SSQU",
+    "SMOOTH_SQU": "SSQU",
 }
 
 
@@ -362,8 +373,7 @@ class Waves:
     By default, size is 256, volume is max +-32767
     """
 
-    waveform_types = ("SIN", "SQU", "SAW", "TRI", "SIL", "NZE",
-                       "ASAW", "ATRI", "ASQU", "SSQU")
+    waveform_types = ("SIN", "SQU", "SAW", "TRI", "SIL", "NZE", "ASAW", "ATRI", "ASQU", "SSQU")
 
     @staticmethod
     def make_waveform(waveid, size=256, volume=32767):
@@ -472,6 +482,7 @@ class Waves:
     def wav(filepath, size=256, pos=0):
         """Create a waveform from a WAV file using adafruit_wave"""
         import adafruit_wave
+
         with adafruit_wave.open(filepath) as w:
             if w.getsampwidth() != 2 or w.getnchannels() != 1:
                 raise ValueError("unsupported format")
@@ -483,5 +494,6 @@ class Waves:
     def wav_info(filepath):
         """return (nframes,nchannels,sampwidth) from a WAV filename"""
         import adafruit_wave
+
         with adafruit_wave.open(filepath) as w:
             return (w.getnframes(), w.getnchannels(), w.getsampwidth())

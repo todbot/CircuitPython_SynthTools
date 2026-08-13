@@ -53,7 +53,7 @@
 
 import synthio
 
-from .blocks import scalar_block, product
+from .blocks import product, scalar_block
 from .waves import env_buffer, fill_env_rise
 
 
@@ -78,8 +78,9 @@ class AHREnvelope:
     re-aim-the-endpoints release -- is identical, which is why this is one
     class with a flag rather than two classes."""
 
-    def __init__(self, attack=0.05, release=0.4, amount=0.0, curve=1,
-                 falling=False, release_amount=0.0):
+    def __init__(
+        self, attack=0.05, release=0.4, amount=0.0, curve=1, falling=False, release_amount=0.0
+    ):
         self._attack = attack
         self._release = release
         self._curve = curve
@@ -209,10 +210,8 @@ class AHREnvelope:
         # The ONLY difference between a filter envelope and a pitch envelope:
         # which end of the lerp the amount sits at.
         if self._falling:
-            return synthio.Math(synthio.MathOperation.CONSTRAINED_LERP,
-                                depth, 0.0, pos)
-        return synthio.Math(synthio.MathOperation.CONSTRAINED_LERP,
-                            0.0, depth, pos)
+            return synthio.Math(synthio.MathOperation.CONSTRAINED_LERP, depth, 0.0, pos)
+        return synthio.Math(synthio.MathOperation.CONSTRAINED_LERP, 0.0, depth, pos)
 
     def start_release(self, env):
         """Send a voice's envelope into release. Call at note-off.
@@ -227,7 +226,7 @@ class AHREnvelope:
         it means the rising and falling cases need no branch here at all,
         since a filter envelope simply has a block that holds 0.0.
         """
-        env.a = env.value       # move from here...
-        env.b = self._rel_amt   # ...to wherever the release lands
+        env.a = env.value  # move from here...
+        env.b = self._rel_amt  # ...to wherever the release lands
         env.c.rate = self._rate_r
         env.c.retrigger()

@@ -2,9 +2,11 @@
 # SPDX-License-Identifier: MIT
 
 import time
-import ulab.numpy as np
+
 import synthio
-from synth_setup import synth, knobA
+import ulab.numpy as np
+from synth_setup import knobA, synth
+
 from synthtools.wavetable import Wavetable
 
 wavetable_fname = "/wavetables/PLAITS02.WAV"  # from http://waveeditonline.com/

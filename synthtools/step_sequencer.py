@@ -33,9 +33,7 @@ class StepSequencer:
     """
 
     def __init__(self, step_count, steps_per_beat, on_func=None, off_func=None):
-        self.steps_per_beat = (
-            steps_per_beat  # 1 = 1/4 note, 2 = 8th note, 4 = 16th note
-        )
+        self.steps_per_beat = steps_per_beat  # 1 = 1/4 note, 2 = 8th note, 4 = 16th note
         self.step_count = step_count  # how big the sequence is
         self.i = 0  # where in the step sequence we currently are
 

@@ -40,10 +40,12 @@ class WavetableSynth(Synth):
 
     def _make_notes(self, midi_note, velocity):
         f = synthio.midi_to_hz(midi_note)
+        # fmt: off
         return (synthio.Note(f, waveform=self._wave, envelope=self._env,
                              amplitude=velocity / 127,
                              filter=self._make_filter(),
                              bend=self._bend_cur),)
+        # fmt: on
 
     @property
     def wave_pos(self):
@@ -52,7 +54,7 @@ class WavetableSynth(Synth):
     @wave_pos.setter
     def wave_pos(self, v):
         self._wave_pos = v
-        self._wavetable.set_wave_pos(v)   # in-place: morphs sounding notes
+        self._wavetable.set_wave_pos(v)  # in-place: morphs sounding notes
 
     @property
     def wave_file(self):
@@ -60,7 +62,7 @@ class WavetableSynth(Synth):
 
     @wave_file.setter
     def wave_file(self, v):
-        if v != self._wt_path:            # reopens file; next note-on uses it
+        if v != self._wt_path:  # reopens file; next note-on uses it
             self._wavetable = Wavetable(v)
             self._wt_path = v
             self._wavetable.set_wave_pos(self._wave_pos)

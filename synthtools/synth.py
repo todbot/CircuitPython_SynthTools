@@ -7,7 +7,7 @@
 # Subclasses override _recompile() / _decompile() and _make_notes(), and
 # extend _PARAMS.
 #
-# Requires CircuitPython 10+ 
+# Requires CircuitPython 10+
 #
 # --- two ideas run through this file ---------------------------------
 #
@@ -41,7 +41,7 @@
 import synthio
 
 from .ahr_envelope import AHREnvelope
-from .blocks import scalar_block, sum3, product, lerp, clamp
+from .blocks import clamp, lerp, product, scalar_block, sum3
 from .waves import ramp_wave
 
 FILTER_MODES = {
@@ -54,6 +54,7 @@ FILTER_MODES = {
 
 class Synth:
     # names settable via set_param(); also what a UI can enumerate
+    # fmt: off
     _PARAMS = ("filt_f", "filt_q", "filt_type", "amp_env",
                "attack_time", "decay_time", "sustain_level", "release_time",
                "vib_depth", "vib_rate", "vib_delay",
@@ -61,6 +62,7 @@ class Synth:
                "filt_lfo_rate", "filt_lfo_amount",
                "fenv_amount", "fenv_attack", "fenv_release", "fenv_curve",
                "filt_vel", "fenv_vel")
+    # fmt: on
 
     # The cutoff bus can now be driven below zero -- a downward fenv_amount,
     # a negative filt_vel, a big filt_lfo_amount -- none of which was
@@ -101,10 +103,8 @@ class Synth:
         # A one-shot 0 -> 1 ramp. rate = 1/vib_delay, so vib_delay = 0 needs
         # no special case at all -- the ramp just finishes in a millisecond.
         # The graph stays static, which is what the identity rule wants.
-        self._vib_fade = synthio.LFO(waveform=ramp_wave(), rate=1000.0,
-                                     once=True)
-        self._vib_lfo = synthio.LFO(
-            rate=5.0, scale=product(self._vib_depth_blk, self._vib_fade))
+        self._vib_fade = synthio.LFO(waveform=ramp_wave(), rate=1000.0, once=True)
+        self._vib_lfo = synthio.LFO(rate=5.0, scale=product(self._vib_depth_blk, self._vib_fade))
         self._bend_blk = scalar_block(0.0)
         self._bend = sum3(self._vib_lfo, self._bend_blk)
         # --- the filter cutoff modulation bus ------------------------
@@ -130,8 +130,7 @@ class Synth:
         # the whole swing up into 0..amount -- see filt_lfo_amount below.
         self._filt_lfo = synthio.LFO(rate=0.5, scale=0.0, offset=0.0)
         self._filt_sum = sum3(self._filt_f_blk, self._filt_lfo)
-        self._filt_base = clamp(self._filt_sum, self.FILT_F_MIN,
-                                self.FILT_F_MAX)
+        self._filt_base = clamp(self._filt_sum, self.FILT_F_MIN, self.FILT_F_MAX)
         # Anything not reachable from a sounding Note has to be rooted here
         # or synthio never updates it -- and that applies to Math blocks,
         # not just LFOs.
@@ -157,13 +156,13 @@ class Synth:
         # knows nothing about filters. Created once and never replaced --
         # sounding voices hold references to its buffer and blocks.
         self._fenv = AHREnvelope()
-        self._fenvs = {}          # midi_note -> env block, for held notes
+        self._fenvs = {}  # midi_note -> env block, for held notes
         # The pitch envelope is the SAME class, falling instead of rising:
         # it starts at penv_amount and settles to 0 (true pitch), then on
         # note-off drifts on to penv_out_amount. Its own instance, so its
         # shape buffer and rates are independent of the filter's.
         self._penv = AHREnvelope(falling=True)
-        self._penvs = {}          # midi_note -> pitch env block
+        self._penvs = {}  # midi_note -> pitch env block
         # "voice under construction" temporaries, set by note_on around the
         # call to _make_notes so _make_filter and the subclasses can pick
         # them up
@@ -201,7 +200,7 @@ class Synth:
         # write straight through into the loaded patch.
         self._amp_env = list(p.amp_env)
         self._env = self._make_env()
-        self._filt_f_blk.a = p.filt_f                    # write, don't replace
+        self._filt_f_blk.a = p.filt_f  # write, don't replace
         self._filt_q_blk.a = p.filt_q
         self._filt_vel_blk.a = p.filt_vel
         self._fenv_vel_blk.a = p.fenv_vel
@@ -211,28 +210,26 @@ class Synth:
         self.filt_lfo_amount = p.filt_lfo_amount
         self._vib_lfo.rate = p.vib_rate
         self._vib_depth_blk.a = p.vib_depth
-        self.vib_delay = p.vib_delay          # via the property: sets a rate
+        self.vib_delay = p.vib_delay  # via the property: sets a rate
         # written into the existing envelopes, never new ones, and in one
         # call each so the shape is rebuilt once rather than per parameter
-        self._fenv.configure(p.fenv_attack, p.fenv_release,
-                             p.fenv_amount, p.fenv_curve)
+        self._fenv.configure(p.fenv_attack, p.fenv_release, p.fenv_amount, p.fenv_curve)
         # curve 1: penv_curve is not a patch field, though the class takes one
-        self._penv.configure(p.penv_time, p.penv_out_time,
-                             p.penv_amount, 1, p.penv_out_amount)
+        self._penv.configure(p.penv_time, p.penv_out_time, p.penv_amount, 1, p.penv_out_amount)
 
     def _decompile(self):
         """Push live state back into self.patch. The opposite of
         _recompile(). Subclasses call super()._decompile()."""
         p = self.patch
         p.filt_type = self._filt_type
-        p.amp_env = list(self._amp_env)     # copy out, so later knob turns
+        p.amp_env = list(self._amp_env)  # copy out, so later knob turns
         #                                     do not leak into the patch
         p.filt_f = self._filt_f_blk.a
         p.filt_q = self._filt_q_blk.a
         p.filt_vel = self._filt_vel_blk.a
         p.fenv_vel = self._fenv_vel_blk.a
         p.filt_lfo_rate = self._filt_lfo.rate
-        p.filt_lfo_amount = self.filt_lfo_amount   # undoes the half-swing
+        p.filt_lfo_amount = self.filt_lfo_amount  # undoes the half-swing
         p.vib_rate = self._vib_lfo.rate
         p.vib_depth = self._vib_depth_blk.a
         p.vib_delay = self._vib_delay
@@ -260,8 +257,7 @@ class Synth:
 
     def _make_env(self):
         a, d, s, r = self._amp_env
-        return synthio.Envelope(attack_time=a, decay_time=d,
-                                sustain_level=s, release_time=r)
+        return synthio.Envelope(attack_time=a, decay_time=d, sustain_level=s, release_time=r)
 
     # --- per-voice construction -----------------------------------------
 
@@ -294,16 +290,21 @@ class Synth:
             # harder. filt_vel stays live inside the PRODUCT.
             vel_hz = product(self._filt_vel_blk, velocity / 127.0)
         if self._fenv_cur is None and vel_hz is None:
-            return self._filt_base          # already clamped
+            return self._filt_base  # already clamped
         # `is None` rather than truthiness throughout: these are synthio
         # blocks, and whether one is falsy is not ours to assume.
         # Clamped again here, not just on the shared base: a downward
         # fenv_amount (a normal patch) or a negative filt_vel can drive
         # this sum below zero all on its own.
-        return clamp(sum3(self._filt_base,
-                          self._fenv_cur if self._fenv_cur is not None else 0.0,
-                          vel_hz if vel_hz is not None else 0.0),
-                     self.FILT_F_MIN, self.FILT_F_MAX)
+        return clamp(
+            sum3(
+                self._filt_base,
+                self._fenv_cur if self._fenv_cur is not None else 0.0,
+                vel_hz if vel_hz is not None else 0.0,
+            ),
+            self.FILT_F_MIN,
+            self.FILT_F_MAX,
+        )
 
     def _voice_bend(self):
         """This voice's bend input, shared by all its Notes.
@@ -329,8 +330,10 @@ class Synth:
         """
         if self._filt_mode is None:
             return None
+        # fmt: off
         return synthio.Biquad(self._filt_mode, frequency=self._cutoff_cur,
                               Q=self._filt_q_blk)
+        # fmt: on
 
     # --- real-time path -------------------------------------------------
 
@@ -385,7 +388,7 @@ class Synth:
 
     def pitch_bend(self, amount):
         """+/-1.0 = one octave. One write into the shared bend graph, O(1)."""
-        self._bend_blk.a = amount   # bend is performance state, not patch state
+        self._bend_blk.a = amount  # bend is performance state, not patch state
 
     # --- live parameters ------------------------------------------------
     # Setters write live state ONLY. Getters read it back. The patch is not
@@ -397,7 +400,7 @@ class Synth:
 
     @filt_f.setter
     def filt_f(self, v):
-        self._filt_f_blk.a = v     # reaches every sounding voice, O(1)
+        self._filt_f_blk.a = v  # reaches every sounding voice, O(1)
 
     @property
     def filt_q(self):
@@ -414,7 +417,7 @@ class Synth:
     @filt_type.setter
     def filt_type(self, v):
         self._filt_type = v
-        self._filt_mode = FILTER_MODES.get(v)   # applies at next note-on
+        self._filt_mode = FILTER_MODES.get(v)  # applies at next note-on
 
     # --- amp envelope ---------------------------------------------------
     # synthio.Envelope is immutable: every ADSR edit means a new object.
@@ -448,7 +451,7 @@ class Synth:
 
     @attack_time.setter
     def attack_time(self, v):
-        self._amp_env[0] = v       # in-place, no list rebuild
+        self._amp_env[0] = v  # in-place, no list rebuild
         self._rebuild_env()
 
     @property
@@ -564,7 +567,7 @@ class Synth:
 
     @property
     def filt_lfo_amount(self):
-        return self._filt_lfo.scale * 2.0    # stored as half-swing, see below
+        return self._filt_lfo.scale * 2.0  # stored as half-swing, see below
 
     @filt_lfo_amount.setter
     def filt_lfo_amount(self, v):
@@ -609,7 +612,7 @@ class Synth:
 
     @fenv_attack.setter
     def fenv_attack(self, v):
-        self._fenv.attack = v           # a rate write: cheap on a knob
+        self._fenv.attack = v  # a rate write: cheap on a knob
 
     @property
     def fenv_release(self):

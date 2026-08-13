@@ -52,8 +52,8 @@
 import time
 
 import synthio
-
 from synth_setup import synth
+
 from synthtools.ahr_envelope import AHREnvelope
 
 penv = AHREnvelope(

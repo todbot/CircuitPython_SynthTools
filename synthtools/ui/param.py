@@ -31,9 +31,7 @@ class ParamRange:
     """ParamRange is a Param with a numeric range and setter/getter functions
     to update and set the represented value"""
 
-    def __init__(
-        self, name, fullname, val, fmt, minval, maxval, setter=None, getter=None
-    ):
+    def __init__(self, name, fullname, val, fmt, minval, maxval, setter=None, getter=None):
         self.name = name
         self.fullname = fullname
         self.val = val

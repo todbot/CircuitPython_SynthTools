@@ -9,8 +9,8 @@
 # `waveform`. For the polyphonic synth instrument built on top of it, see
 # wavetable_synth.py.
 
-import ulab.numpy as np
 import adafruit_wave
+import ulab.numpy as np
 
 
 class Wavetable:
@@ -32,7 +32,7 @@ class Wavetable:
     def set_wave_pos(self, pos):
         """pos is fractional: 3.25 = 25% between wave 3 and wave 4."""
         n = self.num_waves
-        if n < 2:                       # single-wave file: nothing to blend
+        if n < 2:  # single-wave file: nothing to blend
             self.waveform[:] = self._read_wave(0)
             return
         if pos < 0:
@@ -40,12 +40,12 @@ class Wavetable:
         elif pos > n - 1:
             pos = n - 1.0
         i = int(pos)
-        if i > n - 2:                   # at the very top, blend the last pair
+        if i > n - 2:  # at the very top, blend the last pair
             i = n - 2
         frac = pos - i
 
         wave_a = self._read_wave(i)
-        if frac <= 0.0:                 # exact wave: skip the read and the math
+        if frac <= 0.0:  # exact wave: skip the read and the math
             self.waveform[:] = wave_a
             return
         wave_b = self._read_wave(i + 1)
@@ -59,5 +59,4 @@ class Wavetable:
         # on the store back into the int16 buffer. Multiplying by the float
         # weights first promotes to float, and since frac is in [0,1] the
         # result is bounded by the two inputs, so it always fits.
-        self.waveform[:] = np.array(wave_a * (1.0 - frac) + wave_b * frac,
-                                    dtype=np.int16)
+        self.waveform[:] = np.array(wave_a * (1.0 - frac) + wave_b * frac, dtype=np.int16)

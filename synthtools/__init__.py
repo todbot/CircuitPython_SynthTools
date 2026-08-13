@@ -25,9 +25,9 @@ Implementation Notes
 
 # imports
 
-from .patch import Patch, save_patches, load_patches
-from .synth import Synth
+from .patch import Patch, load_patches, save_patches
 from .subtractive_synth import SubtractiveSynth
+from .synth import Synth
 
 # wavetable_synth needs the adafruit_wave library; don't break the whole
 # package if it isn't installed. Import it directly if you want it:

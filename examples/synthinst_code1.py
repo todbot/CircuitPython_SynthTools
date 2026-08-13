@@ -3,12 +3,14 @@
 
 # code.py - synthtools instrument demo for RP2040-class boards, CircuitPython 10+
 import time
-from synth_setup import synth as engine
-from synthtools import Patch, SubtractiveSynth
-from synthtools.wavetable_synth import WavetableSynth   # needs adafruit_wave
 
+from synth_setup import synth as engine
+
+from synthtools import Patch, SubtractiveSynth
+from synthtools.wavetable_synth import WavetableSynth  # needs adafruit_wave
 
 # --- a patch, and a synth to put it on -----------------------------------
+# fmt: off
 patch = Patch(name="fat bass", wave="ASAW", detune=1.004,
               filt_type="LPF", filt_f=800, filt_q=1.4,
               amp_env=[0.01, 0.1, 0.7, 0.4],
@@ -17,6 +19,7 @@ patch = Patch(name="fat bass", wave="ASAW", detune=1.004,
               fenv_amount=3000, fenv_attack=0.02, fenv_release=0.30,
               # a slow cyclic wobble on top of it (0 = off)
               filt_lfo_rate=0.4, filt_lfo_amount=0.3)
+# fmt: on
 
 synth = SubtractiveSynth(engine, patch)
 

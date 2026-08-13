@@ -23,14 +23,15 @@
 
 import time
 
+from arpeggiator import Arpeggiator
 from synth_setup import synth as engine
+
 from synthtools import Patch, SubtractiveSynth
 from synthtools.waves import wave_names
-from arpeggiator import Arpeggiator
 
-DURATION = 3.0  # seconds per wave 
-#DETUNE = 1.01  # ~17 cents -- clearly audible in a 3s clip, still musical
-DETUNE = 1.004  
+DURATION = 3.0  # seconds per wave
+# DETUNE = 1.01  # ~17 cents -- clearly audible in a 3s clip, still musical
+DETUNE = 1.004
 
 patch = Patch(
     name="wavedemo",
@@ -46,7 +47,7 @@ synth = SubtractiveSynth(engine, patch)
 
 # root, major third, fifth, octave -- one bar of a plain major arpeggio
 root_note = 48  # C3
-arp_notes = [root_note, root_note + 4, root_note + 7, root_note + 12, root_note+7]
+arp_notes = [root_note, root_note + 4, root_note + 7, root_note + 12, root_note + 7]
 
 
 def note_on(midi_note):
@@ -62,7 +63,7 @@ arp.set_bpm(120, 4)  # 10bpm 16th notes -- ~9 cycles of the 4-note pattern per D
 arp.notes = arp_notes
 arp.start()
 
-#wave_names = wave_names()
+# wave_names = wave_names()
 wave_names = ("SAW", "ASAW", "SQU", "ASQU", "SSQU")
 
 while True:
@@ -73,7 +74,7 @@ while True:
         t0 = time.monotonic()
         while time.monotonic() - t0 < DURATION:
             arp.update()
-            
+
     synth.detune = DETUNE
     for wave_name in wave_names:
         synth.wave = wave_name
@@ -81,5 +82,3 @@ while True:
         t0 = time.monotonic()
         while time.monotonic() - t0 < DURATION:
             arp.update()
-
-            

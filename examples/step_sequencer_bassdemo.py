@@ -1,12 +1,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 Tod Kurt
 # SPDX-License-Identifier: MIT
 #
-import time
 import random
+import time
+
 import synthio
 import ulab.numpy as np
-from synth_setup import synth, knobA, knobB, keys
 from step_sequencer import StepSequencer
+from synth_setup import keys, knobA, knobB, synth
 
 bpm = 120
 gate_length = 0.3  #  percent 0-1
@@ -80,6 +81,5 @@ while True:
         gatelen = knobB.value / 65535
         seq.set_gates(gatelen)
         print(
-            "mode:%d bpm: %3d gate_millis: %.1f"
-            % (button_mode, seq.bpm, seq.step_millis * gatelen)
+            "mode:%d bpm: %3d gate_millis: %.1f" % (button_mode, seq.bpm, seq.step_millis * gatelen)
         )

@@ -15,6 +15,7 @@
 import time
 
 from synth_setup import synth as engine
+
 from synthtools import Patch, SubtractiveSynth
 
 # --- a patch built around the filter envelope ---------------------------
@@ -70,7 +71,7 @@ riff = (36, 36, 48, 36, 43, 36, 46, 36)
 #      amp release that was 3.7 voices, each at a different point in its sweep,
 #      which averages to a wash. Here it is ~1.1.
 BEAT = 0.45
-GATE = 0.62          # fraction of the beat the key is held down
+GATE = 0.62  # fraction of the beat the key is held down
 
 
 def play(bars, label, velocity=110):
@@ -137,8 +138,8 @@ while True:
     #    it drifts across the phrase instead of wobbling within a note.
     synth.fenv_amount = 0
     synth.filt_f = 120
-    synth.filt_lfo_amount = 1800     # 120..1920 Hz -- 4 octaves
-    synth.filt_lfo_rate = 3.0        # ~1.5 cycles per note
+    synth.filt_lfo_amount = 1800  # 120..1920 Hz -- 4 octaves
+    synth.filt_lfo_rate = 3.0  # ~1.5 cycles per note
     play(1, "filt_lfo 1800 @ 3Hz -- envelope off, LFO alone: 120..1920 Hz")
 
     #    ...and now both at once, with the envelope kept small enough that

@@ -43,6 +43,7 @@ class SubtractiveSynth(Synth):
         # random) could exceed int16 range on its own, before the filter
         # even sees it. 0.625/0.375 keeps osc2 at 60% of osc1's level, same
         # blend as before, just scaled so the ceiling is 1.0 instead of 1.6.
+        # fmt: off
         n1 = synthio.Note(f, waveform=random_phase_wave(self._wave_name),
                           envelope=self._env,
                           amplitude=amp * 0.625 if detuned else amp,
@@ -54,6 +55,7 @@ class SubtractiveSynth(Synth):
                               filter=self._make_filter(), bend=self._bend_cur)
             return (n1, n2)
         return (n1,)
+        # fmt: on
 
     @property
     def wave(self):

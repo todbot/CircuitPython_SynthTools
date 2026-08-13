@@ -2,10 +2,13 @@
 # SPDX-License-Identifier: MIT
 
 import time
+
 from synth_setup import synth as engine
+
 from synthtools import Patch, SubtractiveSynth
 
 # --- a patch, and a synth to put it on -----------------------------------
+# fmt: off
 patch1 = Patch(name="fat bass", wave="ASAW", detune=1.004,
                filt_type="LPF", filt_f=800, filt_q=1.4,
                amp_env=[0.01, 0.1, 0.8, 0.4],
@@ -14,10 +17,11 @@ patch1 = Patch(name="fat bass", wave="ASAW", detune=1.004,
                fenv_amount=3000, fenv_attack=0.02, fenv_release=0.30,
                # a slow cyclic wobble on top of it (0 = off)
                filt_lfo_rate=0.4, filt_lfo_amount=0.3)
+# fmt: on
 
 synth = SubtractiveSynth(engine, patch1)
 
-# JSON round-trip 
+# JSON round-trip
 patch_json = patch1.to_json()
 print("patch as json:", patch_json)
 patch1 = Patch.from_json(patch_json)
@@ -44,7 +48,7 @@ while True:
         synth.wave = "ASQU" if synth.wave == "ASAW" else "ASAW"
 
     print("filt_f: %5d  wave: %s" % (synth.filt_f, synth.wave))
-    
+
     # all O(1), all reach sounding voices:
     #   synth.vib_depth = 0.006        # ~10 cents of vibrato
     #   synth.fenv_amount = 2000       # filter envelope depth in Hz
@@ -52,4 +56,3 @@ while True:
     #   synth.filt_lfo_amount = 600    # cyclic cutoff wobble, Hz
     #   synth.filt_vel = -1500         # hard playing CLOSES the filter
     #   synth.pitch_bend(0.05)
-
