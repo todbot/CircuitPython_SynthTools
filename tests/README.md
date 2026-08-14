@@ -7,9 +7,8 @@ SPDX-License-Identifier: MIT
 # synthtools tests
 
 Plain scripts, no pytest. They exit non-zero on failure so they work under a
-bare MicroPython as well as CPython — which matters, because this library
-targets CircuitPython and adding a desktop-only test dependency would defeat
-the point.
+bare MicroPython as well as CPython, even though this library is CircuitPython.
+Some tests require actual CircuitPython hardware.
 
 ```sh
 sh tests/run_tests.sh          # everything, under every interpreter found
@@ -21,17 +20,15 @@ micropython tests/test_wiring.py
 `.pre-commit-config.yaml`), so these files are exempt from ruff **and** from
 the `reuse` hook — no SPDX headers needed here.
 
-## Three tiers, and what each one actually proves
+## Three ways to test
 
 | | interpreter | ulab backend | catches |
 |---|---|---|---|
 | numeric | CPython | real numpy | DSP/array behaviour, int16 range |
-| portability | MicroPython | pure-Python fallback | the CPython-isms in §7 |
+| portability | MicroPython | pure-Python fallback | CPython-isms |
 | hardware | CircuitPython on device | real ulab | what synthio actually permits |
 
-The split is from `CLAUDE-synthlib.md` §9. Real numpy is the only thing that
-answers numeric questions honestly (it is how the int16 lerp overflow in §8
-was pinned down). MicroPython is the only thing that catches the import and
+MicroPython is the only thing that catches the import and
 `__dict__` bugs that CPython silently permits.
 
 Both tiers currently produce **identical** envelope values, which is the main
@@ -74,9 +71,9 @@ evidence that the pure-Python fallback is faithful.
   rejects a non-list right-hand side, so slice assignment from another array
   would fail.
 
-## A trap worth knowing before you edit envelope tests
+## Test gotchas
 
-**Never test the release only at `fenv_curve = 1`.** At curve 1 the correct
+- **Never test the release only at `fenv_curve = 1`.** At curve 1 the correct
 release shape and a mirrored-attack one are algebraically identical (`1-t == 1-t`),
 so the test proves nothing about curvature. A release that hung at the top and
 then fell off a cliff at curve>=2 once passed all three tiers for exactly this
