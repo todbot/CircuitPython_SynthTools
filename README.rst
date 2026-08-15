@@ -95,9 +95,12 @@ Usage Example
 What's Included
 ===============
 
-* ``Synth`` / ``SubtractiveSynth`` / ``WavetableSynth`` -- the synth engines:
-  shared voice, patch, and modulation handling, plus a subtractive
-  (two-oscillator) and a wavetable-playback style
+* ``Synth`` -- synth engine base: shared voice, patch, and modulation handling,
+  with ``mono`` mode for a single-voice synth with ``glide_time``  portamento
+* ``SubtractiveSynth`` -- subtractive two-oscillator synth w/ detune
+* ``WavetableSynth`` -- wavetable-playback with adjustable wave_pos
+* ``BasslineSynth`` -- TB-303-style acid bassline: monophonic, one
+  oscillator, a decay-only filter sweep, per-step slide and accent
 * ``Patch`` -- inert, JSON-able patch data; save/load with
   ``save_patches()`` / ``load_patches()``
 * ``Wavetable`` -- loads a wavetable WAV file and lerps between frames
@@ -109,7 +112,9 @@ What's Included
   sequencers with on/off callbacks
 * ``Param`` / ``ParamSet`` -- knob-pickup and scaling for UIs with fewer
   knobs than parameters
-* ``Glider`` -- portamento on ``note.bend``
+* ``Glider`` -- a standalone pitch-slide block for hand-built
+  ``synthio.Note`` graphs (the engines above have their own portamento,
+  via ``mono`` + ``glide_time``)
 * ``RollingAverage`` -- moving-average smoothing for noisy knob reads
 
 Documentation

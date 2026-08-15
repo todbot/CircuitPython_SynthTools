@@ -28,6 +28,12 @@ Subtractive Synth
 .. automodule:: synthtools.subtractive_synth
     :members:
 
+Bassline Synth
+==============
+
+.. automodule:: synthtools.bassline_synth
+    :members:
+
 Wavetable
 =========
 

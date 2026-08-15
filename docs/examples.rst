@@ -25,6 +25,16 @@ Show how to use Synth's complex filter envelope using AHREnvelope
     :caption: examples/synthtools_fenv_demo.py
     :linenos:
 
+Acid bassline demo
+------------------
+
+Monophonic TB-303-style bassline with per-step slide and accent, using
+BasslineSynth
+
+.. literalinclude:: ../examples/synthtools_bassline_demo.py
+    :caption: examples/synthtools_bassline_demo.py
+    :linenos:
+
 Synth Pitch modulation demo
 ---------------------------
 

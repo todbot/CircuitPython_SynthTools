@@ -27,6 +27,9 @@ class Patch:
         self.vib_rate = 5.0  # Hz
         self.vib_depth = 0.0  # in bend units: 1.0 = one octave, 0.006 ~ 10 cents
         self.vib_delay = 0.0  # seconds for vibrato to fade in (0 = immediate)
+        # Portamento. Only applies while the synth's `mono` is set; a
+        # polyphonic synth ignores it. 0 = jump straight to pitch.
+        self.glide_time = 0.0  # seconds to slide from the previous note
         # Pitch envelope, in the same bend units. Bends INTO the note from
         # penv_amount to true pitch, then on note-off drifts OUT to
         # penv_out_amount. Both amounts default to 0 = off, and a voice with

@@ -41,7 +41,7 @@
 import synthio
 
 from .ahr_envelope import AHREnvelope
-from .blocks import clamp, lerp, product, scalar_block, sum3
+from .blocks import clamp, constrained_lerp, lerp, product, scalar_block, sum3
 from .waves import ramp_wave
 
 FILTER_MODES = {
@@ -81,8 +81,21 @@ class Synth:
                "penv_amount", "penv_time", "penv_out_amount", "penv_out_time",
                "filt_lfo_rate", "filt_lfo_amount",
                "fenv_amount", "fenv_attack", "fenv_release", "fenv_curve",
-               "filt_vel", "fenv_vel")
+               "filt_vel", "fenv_vel", "glide_time")
     # fmt: on
+
+    #: One voice at a time: a note-on steals whatever is sounding, whichever
+    #: note it was, and ``glide_time`` slides into it from the previous note.
+    #: Flip it on any style to get a monosynth::
+    #:
+    #:     lead = SubtractiveSynth(synthesizer, patch)
+    #:     lead.mono = True
+    #:     lead.glide_time = 0.08
+    #:
+    #: Glide is meaningless in poly -- one shared bend would drag every
+    #: sounding voice -- so it is only applied while this is set. A plain
+    #: attribute rather than a patch field, like ``push_env``.
+    mono = False
 
     # The cutoff bus can now be driven below zero -- a downward fenv_amount,
     # a negative filt_vel, a big filt_lfo_amount -- none of which was
@@ -126,7 +139,26 @@ class Synth:
         self._vib_fade = synthio.LFO(waveform=ramp_wave(), rate=1000.0, once=True)
         self._vib_lfo = synthio.LFO(rate=5.0, scale=product(self._vib_depth_blk, self._vib_fade))
         self._bend_blk = scalar_block(0.0)
-        self._bend = sum3(self._vib_lfo, self._bend_blk)
+        # --- glide, the third input of the bend SUM ------------------
+        # Portamento needs a per-voice pitch offset ONLY when there are
+        # several voices. In mono there is one, so the glide is shared
+        # like everything else here and just occupies the third input
+        # sum3() already takes and nothing else was using.
+        #
+        # It is a POSITION lerp: the bend runs from the previous note's
+        # pitch to zero while the Note itself is created at the new pitch.
+        # Aimed the other way (start at the new note, bend toward the old)
+        # successive glides would compound.
+        #
+        # In poly mode nothing ever writes _glide.a, so this sits at 0.0
+        # and is inert -- two objects, no arithmetic. And because _bend is
+        # rooted in synthesizer.blocks below, the LFO ticks without being
+        # rooted itself, exactly like _vib_fade inside _vib_lfo.scale.
+        self._glide_pos = synthio.LFO(waveform=ramp_wave(), rate=1000.0, once=True)
+        self._glide = constrained_lerp(0.0, 0.0, self._glide_pos)
+        self._glide_time = 0.0
+        self._last_midi = None  # where the next glide starts from
+        self._bend = sum3(self._vib_lfo, self._bend_blk, self._glide)
         # --- the filter cutoff modulation bus ------------------------
         # Four sources sum onto one destination:
         #
@@ -231,6 +263,7 @@ class Synth:
         self._vib_lfo.rate = p.vib_rate
         self._vib_depth_blk.a = p.vib_depth
         self.vib_delay = p.vib_delay  # via the property: sets a rate
+        self.glide_time = getattr(p, "glide_time", 0.0)  # ditto
         # written into the existing envelopes, never new ones, and in one
         # call each so the shape is rebuilt once rather than per parameter
         self._fenv.configure(p.fenv_attack, p.fenv_release, p.fenv_amount, p.fenv_curve)
@@ -253,6 +286,7 @@ class Synth:
         p.vib_rate = self._vib_lfo.rate
         p.vib_depth = self._vib_depth_blk.a
         p.vib_delay = self._vib_delay
+        p.glide_time = self._glide_time
         p.penv_amount = self._penv.amount
         p.penv_time = self._penv.attack
         p.penv_out_amount = self._penv.release_amount
@@ -361,8 +395,18 @@ class Synth:
         """Return a tuple of synthio.Note for this key. Override me."""
         raise NotImplementedError
 
-    def note_on(self, midi_note, velocity=127):
-        if midi_note in self.voices:
+    def note_on(self, midi_note, velocity=127, glide=None):
+        """Press a note.
+
+        ``glide`` overrides glide_time in seconds for this note only, and
+        only matters in mono -- a per-step slide flag needs that, because
+        writing glide_time itself would leak into the patch.
+        """
+        if self.mono:
+            # one voice: steal whatever is sounding, whichever note it is
+            self.all_notes_off()
+            self._aim_glide(midi_note, glide)
+        elif midi_note in self.voices:
             self.note_off(midi_note)
         # Restart the vibrato fade only when starting from silence, so
         # adding a note to a held chord does not duck everyone's vibrato
@@ -409,6 +453,31 @@ class Synth:
     def pitch_bend(self, amount):
         """+/-1.0 = one octave. One write into the shared bend graph, O(1)."""
         self._bend_blk.a = amount  # bend is performance state, not patch state
+
+    def _aim_glide(self, midi_note, seconds=None):
+        """Point the shared glide block at ``midi_note`` and start it.
+
+        Bend units are octaves, so a semitone is 1/12. The offset is where
+        the pitch STARTS; it always ends at 0, i.e. the note's own pitch.
+
+        Called from note_on() in mono only. Note the previous note is
+        still releasing at this point and shares this bend, so a glide
+        drags its tail along too -- inherent to a shared bend, and only
+        audible with a long amp release and a long glide together.
+        """
+        prev = self._last_midi
+        self._last_midi = midi_note
+        secs = self._glide_time if seconds is None else seconds
+        self._glide_pos.rate = 1.0 / max(secs, 0.001)
+        if prev is None:
+            self._glide.a = 0.0  # first note ever: nothing to glide from
+        else:
+            # Plus whatever glide is still in flight, so interrupting one
+            # mid-slide starts the next from where the pitch actually IS.
+            # Same structural continuity as AHREnvelope.start_release()'s
+            # `env.a = env.value` -- there is no rate to recompute.
+            self._glide.a = (prev - midi_note) / 12.0 + self._glide.value
+        self._glide_pos.retrigger()
 
     # --- live parameters ------------------------------------------------
     # Setters write live state ONLY. Getters read it back. The patch is not
@@ -523,18 +592,34 @@ class Synth:
 
     @property
     def vib_delay(self):
-        return self._vib_delay
-
-    @vib_delay.setter
-    def vib_delay(self, v):
         """Seconds for the vibrato to fade in from nothing, restarted
         whenever playing begins from silence.
 
         Only a rate on the shared fade ramp, so it is cheap on a knob. It
         takes effect at the NEXT retrigger, not mid-fade.
         """
+        return self._vib_delay
+
+    @vib_delay.setter
+    def vib_delay(self, v):
         self._vib_delay = v
         self._vib_fade.rate = 1.0 / max(v, 0.001)
+
+    @property
+    def glide_time(self):
+        """Seconds to slide from the previous note into a new one.
+
+        Portamento. Only applies while ``mono`` is set -- one shared bend
+        would drag every sounding voice otherwise. Only a rate on the
+        shared ramp, so it is cheap on a knob, and it takes effect at the
+        next note-on rather than mid-glide.
+        """
+        return self._glide_time
+
+    @glide_time.setter
+    def glide_time(self, v):
+        self._glide_time = v
+        self._glide_pos.rate = 1.0 / max(v, 0.001)
 
     # --- pitch envelope --------------------------------------------------
     # Thin delegates onto self._penv, which is an AHREnvelope running
@@ -587,10 +672,6 @@ class Synth:
 
     @property
     def filt_lfo_amount(self):
-        return self._filt_lfo.scale * 2.0  # stored as half-swing, see below
-
-    @filt_lfo_amount.setter
-    def filt_lfo_amount(self, v):
         """Hz ADDED above filt_f: the cutoff swings 0..v, never below it.
 
         synthio's LFO is ``waveform[idx] * scale + offset``, and the default
@@ -607,6 +688,10 @@ class Synth:
         Two writes, but both land on the ONE shared LFO, so this is still
         O(1) in polyphony: there is no per-voice copy to walk.
         """
+        return self._filt_lfo.scale * 2.0  # stored as half-swing, see below
+
+    @filt_lfo_amount.setter
+    def filt_lfo_amount(self, v):
         half = v * 0.5
         self._filt_lfo.scale = half
         self._filt_lfo.offset = half

@@ -46,6 +46,16 @@ def lerp(a, b, t):
     return synthio.Math(_OP.LERP, a, b, t)
 
 
+def constrained_lerp(a, b, t):
+    """a*(1-t) + b*t with t clamped to 0..1.
+
+    The one to reach for when t is a one-shot LFO used as a POSITION: it
+    cannot overshoot past b if the LFO reads slightly beyond its last
+    sample. See ahr_envelope.py and Synth's glide.
+    """
+    return synthio.Math(_OP.CONSTRAINED_LERP, a, b, t)
+
+
 def clamp(x, lo, hi):
     """x limited to [lo, hi] -- the middle of three values IS a clamp, so
     this is one block rather than a MIN of a MAX."""
