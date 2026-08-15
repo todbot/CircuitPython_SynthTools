@@ -34,6 +34,12 @@ Bassline Synth
 .. automodule:: synthtools.bassline_synth
     :members:
 
+Audio FX
+========
+
+.. automodule:: synthtools.audio_fx
+    :members:
+
 Wavetable
 =========
 

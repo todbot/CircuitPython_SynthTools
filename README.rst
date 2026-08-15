@@ -101,6 +101,9 @@ What's Included
 * ``WavetableSynth`` -- wavetable-playback with adjustable wave_pos
 * ``BasslineSynth`` -- TB-303-style acid bassline: monophonic, one
   oscillator, a decay-only filter sweep, per-step slide and accent
+* ``EffectsChain`` -- post-synth audio effects: extra filter stages that
+  track the synth's cutoff for a steeper slope, plus optional distortion
+  and tempo-synced echo (needs ``audiofilters`` in the build)
 * ``Patch`` -- inert, JSON-able patch data; save/load with
   ``save_patches()`` / ``load_patches()``
 * ``Wavetable`` -- loads a wavetable WAV file and lerps between frames

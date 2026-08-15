@@ -17,6 +17,7 @@
 
 import time
 
+from synth_setup import mixer
 from synth_setup import synth as engine
 
 from synthtools import BasslineSynth, Patch
@@ -64,6 +65,20 @@ patch = Patch(
 )
 
 synth = BasslineSynth(engine, patch)
+
+# --- extra filter slope, if this build has audiofilters -----------------
+# A synthio.Note holds ONE Biquad, so the voice alone is 12 dB/octave.
+# One extra stage makes 24, which is where the squelch really lives. The
+# stage tracks synth.cutoff_block, so it follows the sweep and the accent
+# with nothing to keep in sync by hand.
+try:
+    from synthtools.audio_fx import EffectsChain
+
+    fx = EffectsChain(synth, stages=1)
+    mixer.voice[0].play(fx.output)  # replaces synth_setup's direct hookup
+    print("filter: 24 dB/octave (1 extra stage)")
+except ImportError:
+    print("no audiofilters in this build -- 12 dB/octave, voice filter only")
 
 # --- the pattern --------------------------------------------------------
 # (midi_note, slide, accent), or None for a rest. Slides and accents are

@@ -57,6 +57,7 @@
 
 import synthio
 
+from .blocks import clamp, product, sum3
 from .synth import Synth
 from .waves import get_wave
 
@@ -121,6 +122,8 @@ class BasslineSynth(Synth):
     _slide_time = 0.10
     _accent_on = False
     _env_accent = None
+    _filter = None  # the shared Biquad; see _build_filter()
+    _cutoff = None  # its stable frequency node
 
     def __init__(self, synthesizer, patch=None):
         super().__init__(synthesizer, patch)
@@ -162,6 +165,58 @@ class BasslineSynth(Synth):
         # which on an accented step is the boosted depth. envmod is the
         # real knob, so re-derive the clean value rather than store that.
         p.fenv_amount = -self._envmod * self._filt_f_blk.a
+
+    # --- the shared filter ------------------------------------------------
+    # Mono, so ONE Biquad and one cutoff node serve every note: built once
+    # and re-aimed, not allocated per note. Synth rebuilds both each
+    # note-on because in poly it has to. Here it does not, and holding
+    # still is what lets audio_fx point extra stages at this cutoff once
+    # and have them track forever -- the same trick as the synth this was
+    # ported from, which shares one filt_env LFO between its voice filter
+    # and its effect filters.
+
+    def _build_filter(self):
+        """Create the shared cutoff node and Biquad, once."""
+        if self._filt_mode is None:
+            self._filter = None
+            return
+        if self._cutoff is None:
+            # sum3's spare inputs are the envelope and velocity, written
+            # per note by _voice_cutoff below. Rooted, so it keeps
+            # evaluating between notes rather than freezing on the last.
+            self._cutoff = clamp(sum3(self._filt_base), self.FILT_F_MIN, self.FILT_F_MAX)
+            self.synthio.blocks.append(self._cutoff)
+        if self._filter is None or self._filter.mode != self._filt_mode:
+            # only on a filt_type change; _cutoff survives it, so anything
+            # tracking the cutoff is undisturbed
+            self._filter = synthio.Biquad(
+                self._filt_mode, frequency=self._cutoff, Q=self._filt_q_blk
+            )
+
+    @property
+    def filter(self):
+        """The one Biquad every note plays through.
+
+        Its ``frequency`` is a stable node carrying the whole cutoff bus --
+        filt_f, the filter LFO, the envelope sweep, the accent -- so a
+        downstream stage can point at it once and follow all of it. That is
+        all ``audio_fx.EffectsChain`` needs.
+        """
+        self._build_filter()
+        return self._filter
+
+    def _voice_cutoff(self, velocity):
+        """One voice, so one cutoff node: re-aim it instead of rebuilding."""
+        if self._filt_mode is None:
+            return None
+        self._build_filter()
+        inner = self._cutoff.a  # the SUM inside the clamp
+        inner.b = self._fenv_cur if self._fenv_cur is not None else 0.0
+        inner.c = product(self._filt_vel_blk, velocity / 127.0) if self._filt_vel_blk.a else 0.0
+        return self._cutoff
+
+    def _make_filter(self):
+        return self.filter
 
     # --- accent ----------------------------------------------------------
 

@@ -155,6 +155,15 @@ ck(38 in syn._fenvs,
    "an accented step raises the depth off zero, so the node must exist -- "
    "the depth has to be written BEFORE the press or make() skips it")
 
+# filt_type=None in mono: the voice gets no filter at all, and the cutoff
+# property is the one place the two can disagree
+nofilt = make(filt_type=None, envmod=0.75)
+nofilt.note_on_step(36)
+ck(nofilt.voices[36][0].filter is None, "filt_type=None must give the voice no filter")
+ck(nofilt.filter is None,
+   "...and nothing downstream can track a filter that does not exist")
+nofilt.all_notes_off()
+
 # --- accent must not contaminate the patch -------------------------------
 # Every accent target is a shared block that Synth also reads back for
 # save_patch(). Accent therefore writes SPARE inputs of those blocks.
