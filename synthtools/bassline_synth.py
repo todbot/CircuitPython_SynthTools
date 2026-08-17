@@ -57,9 +57,17 @@
 
 import synthio
 
+from .audio_fx import EffectsChain, set_drive, tracking_filter
 from .blocks import clamp, product, sum3
-from .synth import Synth
+from .synth import FILTER_MODES, Synth
 from .waves import get_wave
+
+try:
+    import audiodelays
+    import audiofilters
+except ImportError:  # not in every CircuitPython build
+    audiodelays = None
+    audiofilters = None
 
 
 class BasslineSynth(Synth):
@@ -98,7 +106,16 @@ class BasslineSynth(Synth):
     # fmt: off
     _PARAMS = Synth._PARAMS + ("wave", "envmod", "decay", "amp_level",
                                "accent", "accent_cutoff", "accent_q",
-                               "slide_time", "transpose")
+                               "slide_time", "transpose",
+                               # the three STRUCTURAL fx_* fields
+                               # (fx_filter_stages, fx_distortion_on,
+                               # fx_echo_on) are deliberately absent: a
+                               # set_param() from a MIDI CC would silently
+                               # mute the fx chain, since nothing here can
+                               # reach into the mixer and re-play() the
+                               # new tail. See the "effects chain" section.
+                               "fx_filter_mix", "fx_drive", "fx_drive_mix",
+                               "fx_delay_ms", "fx_delay_mix", "fx_delay_decay")
     # fmt: on
 
     #: Inherently monophonic -- accent and glide are both shared state
@@ -125,6 +142,23 @@ class BasslineSynth(Synth):
     _filter = None  # the shared Biquad; see _build_filter()
     _cutoff = None  # its stable frequency node
 
+    # --- the owned effects chain: class attrs; see _build_fx() ----------
+    FX_BUFFER_SIZE = 1024
+    FX_MAX_DELAY_MS = 1000.0  # buffer sizing only, not a knob -- see fx_delay_ms
+    _fx_filter_stages = 0
+    _fx_filter_mix = 1.0
+    _fx_distortion_on = False
+    _fx_drive = 0.0
+    _fx_drive_mix = 0.0
+    _fx_echo_on = False
+    _fx_delay_ms = 300.0
+    _fx_delay_mix = 0.0
+    _fx_delay_decay = 0.3
+    _fx = None  # the owned EffectsChain, lazily built by _build_fx()
+    _fx_stage = None  # tracking_filter()'s Filter, if fx_filter_stages > 0
+    _fx_dist = None  # audiofilters.Distortion, if fx_distortion_on
+    _fx_delay = None  # audiodelays.Echo, if fx_echo_on
+
     def __init__(self, synthesizer, patch=None):
         super().__init__(synthesizer, patch)
         # _env_accent has no other home: Synth.__init__ calls _make_env()
@@ -150,6 +184,34 @@ class BasslineSynth(Synth):
         self._refresh_accent()  # also derives fenv_amount from envmod
         self._rebuild_env()
 
+        # --- the owned effects chain -------------------------------------
+        # Compare the three STRUCTURAL fields against what's already live
+        # BEFORE overwriting them: only a real shape change should drop
+        # self._fx. A patch load that leaves the fx shape alone must reach
+        # the live effects the same as every other param here, not freeze
+        # them -- see the "effects chain" section for why a naive
+        # unconditional invalidate is a silent wrong-sound bug.
+        new_stages = getattr(p, "fx_filter_stages", 0)
+        new_distortion_on = getattr(p, "fx_distortion_on", False)
+        new_echo_on = getattr(p, "fx_echo_on", False)
+        structural_changed = (
+            new_stages != self._fx_filter_stages
+            or new_distortion_on != self._fx_distortion_on
+            or new_echo_on != self._fx_echo_on
+        )
+        self._fx_filter_stages = new_stages
+        self._fx_distortion_on = new_distortion_on
+        self._fx_echo_on = new_echo_on
+        self._fx_filter_mix = getattr(p, "fx_filter_mix", 1.0)
+        self._fx_drive = getattr(p, "fx_drive", 0.0)
+        self._fx_drive_mix = getattr(p, "fx_drive_mix", 0.0)
+        self._fx_delay_ms = getattr(p, "fx_delay_ms", 300.0)
+        self._fx_delay_mix = getattr(p, "fx_delay_mix", 0.0)
+        self._fx_delay_decay = getattr(p, "fx_delay_decay", 0.3)
+        if structural_changed:
+            self._fx = None  # rebuilt lazily, next .fx/.output access
+        self._push_fx_live()
+
     def _decompile(self):
         super()._decompile()
         p = self.patch
@@ -165,6 +227,15 @@ class BasslineSynth(Synth):
         # which on an accented step is the boosted depth. envmod is the
         # real knob, so re-derive the clean value rather than store that.
         p.fenv_amount = -self._envmod * self._filt_f_blk.a
+        p.fx_filter_stages = self._fx_filter_stages
+        p.fx_filter_mix = self._fx_filter_mix
+        p.fx_distortion_on = self._fx_distortion_on
+        p.fx_drive = self._fx_drive
+        p.fx_drive_mix = self._fx_drive_mix
+        p.fx_echo_on = self._fx_echo_on
+        p.fx_delay_ms = self._fx_delay_ms
+        p.fx_delay_mix = self._fx_delay_mix
+        p.fx_delay_decay = self._fx_delay_decay
 
     # --- the shared filter ------------------------------------------------
     # Mono, so ONE Biquad and one cutoff node serve every note: built once
@@ -217,6 +288,108 @@ class BasslineSynth(Synth):
 
     def _make_filter(self):
         return self.filter
+
+    # --- the owned effects chain (optional) -------------------------------
+    # A specialized EffectsChain, not the general-purpose one: fixed order
+    # (filter -> distortion -> echo, the acid-bass signal flow), built
+    # from the SAME tracking_filter()/set_drive() free functions the demo
+    # used to call by hand. The three fx_*_on/fx_filter_stages fields are
+    # STRUCTURAL -- they decide what exists -- everything else is a LIVE
+    # write into whatever's already built. See fx_drive and friends below.
+
+    def _fx_cfg(self):
+        s = self.synthio
+        return {
+            "sample_rate": s.sample_rate,
+            "channel_count": s.channel_count,
+            "buffer_size": self.FX_BUFFER_SIZE,
+        }
+
+    def _build_fx(self):
+        """Build the owned chain from the current fx_* fields, once.
+
+        Atomic: everything lands in locals and self._fx/_fx_stage/_fx_dist/
+        _fx_delay are only assigned once every requested piece succeeds.
+        Assigning self._fx as each piece is built and then raising partway
+        (audiofilters present but audiodelays isn't, say) would leave
+        self._fx non-None with an fx_echo_on that never got its Echo --
+        later code would treat the chain as already built and never retry.
+        """
+        if self._fx is not None:
+            return
+        chain = EffectsChain(self)
+        stage = dist = delay = None
+        # No filter to track with filt_type=None -- an ordinary, silent
+        # no-op, the same as _voice_cutoff() returning None. tracking_filter
+        # itself raises ValueError for external callers who don't already
+        # know why; internally we do, so we just skip the stage instead of
+        # letting that surface from an `output` property read.
+        if self._fx_filter_stages > 0 and self._filt_mode is not None:
+            stage = chain.add(
+                tracking_filter(self, stages=self._fx_filter_stages, mix=self._fx_filter_mix)
+            )
+        if self._fx_distortion_on:
+            if audiofilters is None:
+                raise ImportError("audiofilters is not in this CircuitPython build")
+            # fmt: off
+            dist = chain.add(audiofilters.Distortion(
+                mode=audiofilters.DistortionMode.LOFI, mix=self._fx_drive_mix,
+                soft_clip=True, pre_gain=0, post_gain=0, **self._fx_cfg()))
+            # fmt: on
+            set_drive(dist, self._fx_drive)
+        if self._fx_echo_on:
+            if audiodelays is None:
+                raise ImportError("audiodelays is not in this CircuitPython build")
+            # fmt: off
+            delay = chain.add(audiodelays.Echo(
+                mix=self._fx_delay_mix, delay_ms=self._fx_delay_ms,
+                max_delay_ms=self.FX_MAX_DELAY_MS, decay=self._fx_delay_decay,
+                freq_shift=False, **self._fx_cfg()))
+            # fmt: on
+        self._fx, self._fx_stage, self._fx_dist, self._fx_delay = chain, stage, dist, delay
+
+    def _push_fx_live(self):
+        """Push the current fx_* values into whatever's already built.
+
+        A no-op for anything not built yet -- called by every live fx_*
+        setter AND by _recompile(), so a patch load reaches a chain that's
+        already sounding exactly like every other param in this class,
+        even mid-transition after a structural change has invalidated
+        self._fx but left the still-playing objects in place.
+        """
+        if self._fx_stage is not None:
+            self._fx_stage.mix = self._fx_filter_mix
+        if self._fx_dist is not None:
+            set_drive(self._fx_dist, self._fx_drive)
+            self._fx_dist.mix = self._fx_drive_mix
+        if self._fx_delay is not None:
+            self._fx_delay.delay_ms = self._fx_delay_ms
+            self._fx_delay.mix = self._fx_delay_mix
+            self._fx_delay.decay = self._fx_delay_decay
+
+    @property
+    def fx(self):
+        """The owned effects chain, built the first time anything needs
+        it. Add/insert/remove more effects on it if you want to extend
+        past filter+distortion+echo -- it's an ordinary ``EffectsChain``.
+        """
+        self._build_fx()
+        return self._fx
+
+    @property
+    def output(self):
+        """What a mixer voice should play: the synth itself, or the tail
+        of ``fx`` if any ``fx_*`` field asked for an effect.
+
+        A mixer voice's ``play()`` captures this object's identity at
+        call time. Changing any STRUCTURAL field (``fx_filter_stages``,
+        ``fx_distortion_on``, ``fx_echo_on`` -- directly, via
+        ``set_param()``, or via ``load_patch()``) invalidates the owned
+        chain, so re-fetch ``output`` and hand it to the mixer voice
+        again afterward. The LIVE fx knobs (mix, drive, delay time) need
+        no such thing -- they reach whatever's already playing.
+        """
+        return self.fx.output
 
     # --- accent ----------------------------------------------------------
 
@@ -306,6 +479,25 @@ class BasslineSynth(Synth):
         # fraction of the cutoff, so moving the cutoff moves the sweep.
         self._filt_f_blk.a = v
         self._refresh_accent()
+
+    @property
+    def filt_type(self):
+        return self._filt_type
+
+    @filt_type.setter
+    def filt_type(self, v):
+        # Overridden to also invalidate the owned fx chain on a real mode
+        # change. _build_filter() already re-swaps the VOICE Biquad live
+        # (its frequency/Q are shared blocks, but `mode` isn't), and
+        # tracking_filter() copies that same mode as a plain value into
+        # each owned stage -- so left alone, a filt_type change would
+        # leave the voice on the new mode and the owned stages stuck on
+        # the old one: wrong sound, no exception.
+        old_mode = self._filt_mode
+        self._filt_type = v
+        self._filt_mode = FILTER_MODES.get(v)
+        if self._filt_mode != old_mode:
+            self._fx = None
 
     @property
     def envmod(self):
@@ -408,3 +600,112 @@ class BasslineSynth(Synth):
     def wave(self, v):
         self._wave_name = v
         get_wave(v)  # O(1); warms the cache for the next note-on
+
+    # --- owned effects chain: the three STRUCTURAL switches --------------
+    # Changing any of these invalidates self._fx (rebuilt lazily, next
+    # .fx/.output access) but leaves whatever is currently built alone --
+    # it's still what the mixer is playing. See "the owned effects chain"
+    # above for why, and output's docstring for the resulting contract.
+
+    @property
+    def fx_filter_stages(self):
+        """Extra 12 dB/octave Biquad stages cascaded after the voice's own
+        filter, via ``tracking_filter()``. 0 = none (the default -- costs
+        nothing and never touches ``audiofilters``). Has no effect while
+        ``filt_type`` is ``None``: there is no cutoff to track."""
+        return self._fx_filter_stages
+
+    @fx_filter_stages.setter
+    def fx_filter_stages(self, v):
+        self._fx_filter_stages = v
+        self._fx = None
+
+    @property
+    def fx_distortion_on(self):
+        """Whether a distortion stage exists at all. Separate from
+        ``fx_drive_mix`` on purpose: even at mix 0 a ``Distortion`` effect
+        costs a buffer and real CPU every block, so whether one *exists*
+        has to be deliberate."""
+        return self._fx_distortion_on
+
+    @fx_distortion_on.setter
+    def fx_distortion_on(self, v):
+        self._fx_distortion_on = v
+        self._fx = None
+
+    @property
+    def fx_echo_on(self):
+        """Whether an echo stage exists at all -- see ``fx_distortion_on``,
+        same reasoning."""
+        return self._fx_echo_on
+
+    @fx_echo_on.setter
+    def fx_echo_on(self, v):
+        self._fx_echo_on = v
+        self._fx = None
+
+    # --- owned effects chain: the six LIVE knobs --------------------------
+    # Each reaches whatever's already built via _push_fx_live(); a no-op
+    # until the matching structural switch above turns the effect on.
+
+    @property
+    def fx_filter_mix(self):
+        """Dry/wet for the extra filter stages, 1.0 = fully filtered."""
+        return self._fx_filter_mix
+
+    @fx_filter_mix.setter
+    def fx_filter_mix(self, v):
+        self._fx_filter_mix = v
+        self._push_fx_live()
+
+    @property
+    def fx_drive(self):
+        """Distortion amount, 0..1, via ``set_drive()`` (LOFI mode's own
+        ``drive`` parameter does not behave as its name suggests)."""
+        return self._fx_drive
+
+    @fx_drive.setter
+    def fx_drive(self, v):
+        self._fx_drive = v
+        self._push_fx_live()
+
+    @property
+    def fx_drive_mix(self):
+        """Dry/wet for the distortion stage."""
+        return self._fx_drive_mix
+
+    @fx_drive_mix.setter
+    def fx_drive_mix(self, v):
+        self._fx_drive_mix = v
+        self._push_fx_live()
+
+    @property
+    def fx_delay_ms(self):
+        """Echo delay time in milliseconds."""
+        return self._fx_delay_ms
+
+    @fx_delay_ms.setter
+    def fx_delay_ms(self, v):
+        self._fx_delay_ms = v
+        self._push_fx_live()
+
+    @property
+    def fx_delay_mix(self):
+        """Dry/wet for the echo stage."""
+        return self._fx_delay_mix
+
+    @fx_delay_mix.setter
+    def fx_delay_mix(self, v):
+        self._fx_delay_mix = v
+        self._push_fx_live()
+
+    @property
+    def fx_delay_decay(self):
+        """Echo feedback, 0..1 -- how much each repeat carries into the
+        next. Unrelated to ``decay``, the filter-envelope fall time."""
+        return self._fx_delay_decay
+
+    @fx_delay_decay.setter
+    def fx_delay_decay(self, v):
+        self._fx_delay_decay = v
+        self._push_fx_live()

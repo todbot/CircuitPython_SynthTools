@@ -62,27 +62,26 @@ patch = Patch(
     amp_level=0.75,  # un-accented level, so accents have room to be louder
     slide_time=0.09,
     transpose=0,
+    # --- BasslineSynth's own effects chain, if this build has
+    # audiofilters. A synthio.Note holds ONE Biquad, so the voice alone
+    # is 12 dB/octave; one extra stage makes 24, where the squelch really
+    # lives. The stage tracks synth.filter's cutoff AND resonance on its
+    # own, so it follows the sweep and the accent with nothing to keep in
+    # sync by hand -- see fx_filter_stages in bassline_synth.py.
+    fx_filter_stages=1,
 )
 
 synth = BasslineSynth(engine, patch)
 
-# --- extra filter slope, if this build has audiofilters -----------------
-# A synthio.Note holds ONE Biquad, so the voice alone is 12 dB/octave.
-# One extra stage makes 24, which is where the squelch really lives. The
-# stage tracks synth.cutoff_block, so it follows the sweep and the accent
-# with nothing to keep in sync by hand.
 try:
-    from synthtools.audio_fx import EffectsChain
-
-    fx = EffectsChain(synth, stages=1)
-    mixer.voice[0].play(fx.output)  # replaces synth_setup's direct hookup
+    mixer.voice[0].play(synth.output)  # replaces synth_setup's direct hookup
     print("filter: 24 dB/octave (1 extra stage)")
 except ImportError:
     print("no audiofilters in this build -- 12 dB/octave, voice filter only")
+    mixer.voice[0].play(synth.synthio)
 
 # --- the pattern --------------------------------------------------------
-# (midi_note, slide, accent), or None for a rest. Slides and accents are
-# what turn a scale into a bassline, so this leans on both.
+# (midi_note, slide, accent), or None for a rest.
 PATTERN = (
     (36, False, True),
     (36, False, False),

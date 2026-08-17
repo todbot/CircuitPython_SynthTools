@@ -25,7 +25,7 @@ Implementation Notes
 
 # imports
 
-from .audio_fx import EffectsChain
+from .audio_fx import EffectsChain, set_drive, sync_delay, tracking_filter
 from .bassline_synth import BasslineSynth
 from .patch import Patch, load_patches, save_patches
 from .subtractive_synth import SubtractiveSynth

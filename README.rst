@@ -100,10 +100,14 @@ What's Included
 * ``SubtractiveSynth`` -- subtractive two-oscillator synth w/ detune
 * ``WavetableSynth`` -- wavetable-playback with adjustable wave_pos
 * ``BasslineSynth`` -- TB-303-style acid bassline: monophonic, one
-  oscillator, a decay-only filter sweep, per-step slide and accent
-* ``EffectsChain`` -- post-synth audio effects: extra filter stages that
-  track the synth's cutoff for a steeper slope, plus optional distortion
-  and tempo-synced echo (needs ``audiofilters`` in the build)
+  oscillator, a decay-only filter sweep, per-step slide and accent. Can
+  own its own filter/distortion/echo effects chain via ``fx_*`` patch
+  fields
+* ``EffectsChain`` -- a generic post-synth effects chain: add, insert, or
+  remove any ``audiofilters``/``audiodelays`` effect and it stays wired.
+  ``tracking_filter()`` builds extra filter stages that follow the synth's
+  own cutoff and resonance for a steeper slope (needs ``audiofilters`` in
+  the build)
 * ``Patch`` -- inert, JSON-able patch data; save/load with
   ``save_patches()`` / ``load_patches()``
 * ``Wavetable`` -- loads a wavetable WAV file and lerps between frames
