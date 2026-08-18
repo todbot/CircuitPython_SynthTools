@@ -24,6 +24,15 @@ Introduction
 
 CircuitPython library with tools for making synths with synthio
 
+This library is a collection of tools derived from my many years of playing
+with CircuitPython, ``synthio``, and building synthesizers in general.
+Concepts pulled from these projects and others:
+
+- `CircuitPython Synthio Tutorial <https://todbot.github.io/CircuitPython_Synthio_Tutorial/>`_
+- `circuitpython synthio tricks <https://github.com/todbot/circuitpython-synthio-tricks>`_
+- `pico_test_synth <https://github.com/todbot/pico_test_synth>`_
+- `picotouch_synth <https://github.com/todbot/picotouch_synth>`_
+- `picostepseq <https://github.com/todbot/picostepseq>`_
 
 Dependencies
 =============
