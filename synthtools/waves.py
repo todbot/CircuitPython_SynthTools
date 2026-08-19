@@ -19,7 +19,14 @@ import random
 
 import ulab.numpy as np
 
+# ======================================================================
+# Zone 1: oscillator waveforms -- formula + hand-drawn builders,
+# dispatched and cached by name.
+# ======================================================================
+
 _cache = {}  # (name, size) -> np.array
+
+# --- formula builders --------------------------------------------------
 
 
 def _saw(size, vol):
@@ -177,6 +184,8 @@ def _ssqu(size, vol):
     return _resample_table(_SSQU_TABLE, size, vol)
 
 
+# --- dispatch + cached API ----------------------------------------------
+
 _builders = {
     "SAW": _saw,  # plain formula sawtooth
     "SQU": _squ,  # plain formula square
@@ -236,22 +245,25 @@ def random_phase_wave(name, size=256, volume=28000):
     return wave2x[start : start + size]
 
 
-# --- envelope shapes for one-shot LFOs -------------------------------
+# ======================================================================
+# Zone 2: position-LFO shapes -- one-shot/repeat arrays used as a POSITION
+# (envelopes, vibrato fade-in, glide, wave-position sweeps), not as an
+# oscillator's audio waveform. Two read-only cached fixed shapes
+# (ramp_wave, saw_wave) plus one mutable, curve-shaped buffer system
+# (env_buffer/fill_env_rise) for the AHR envelope.
+#
 # A synthio.LFO with once=True runs its waveform once and then holds the
 # final sample forever. So a buffer holding nothing but a rise 0 -> peak
 # already IS attack-then-hold: there is no need to write a plateau after
 # the rise, because the LFO supplies one for free and for as long as the
 # key is down. Release re-runs the same rise through a CONSTRAINED_LERP
 # with swapped endpoints -- see ahr_envelope.py.
+# ======================================================================
 
 ENV_SIZE = 64
 ENV_PEAK = 32767
 
-
-def env_buffer():
-    """A writable buffer for an AHR envelope shape."""
-    return np.zeros(ENV_SIZE, dtype=np.int16)
-
+# --- read-only cached fixed shapes --------------------------------------
 
 _ramp = None
 
@@ -273,6 +285,36 @@ def ramp_wave():
     if _ramp is None:
         _ramp = np.array((0, ENV_PEAK), dtype=np.int16)
     return _ramp
+
+
+_saw_lfo = None
+
+
+def saw_wave():
+    """A cached 0 -> peak ramp across ENV_SIZE samples, for a wave-position
+    LFO's "saw" shape in repeat mode.
+
+    Per the synthio tutorial, LFO interpolates the wrap from the last
+    sample back to the first, so a short buffer -- ramp_wave()'s 2 samples,
+    say -- loops as a TRIANGLE (up then back down across the wrap), not a
+    saw. The wrap has to be a small fraction of the cycle instead, which
+    needs enough samples that the rise dominates: with ENV_SIZE points the
+    wrap is one interpolation step, 1/ENV_SIZE of the cycle.
+
+    once=True doesn't need this -- ramp_wave() alone already gives a clean
+    ramp that holds at the top -- so this is repeat-mode only."""
+    global _saw_lfo
+    if _saw_lfo is None:
+        _saw_lfo = np.linspace(0, ENV_PEAK, num=ENV_SIZE, dtype=np.int16)
+    return _saw_lfo
+
+
+# --- mutable, curve-shaped buffer (the AHR envelope's rise) -------------
+
+
+def env_buffer():
+    """A writable buffer for an AHR envelope shape."""
+    return np.zeros(ENV_SIZE, dtype=np.int16)
 
 
 def _curve_ramp(start, stop, n, curve):
@@ -344,7 +386,13 @@ def fill_env_rise(buf, curve=1):
         buf[:] = np.array(_curve_ramp(1.0, 0.0, n, curve) * (-ENV_PEAK) + ENV_PEAK, dtype=np.int16)
 
 
-# --- Waves: string-keyed factory + WAV loading, for interactive use ---
+# ======================================================================
+# Zone 3: Waves -- string-keyed interactive factory + WAV loading.
+#
+# Never imported anywhere else in this package: every other module uses
+# the zone-1/zone-2 functions above directly. This class exists purely as
+# a convenience for building instruments interactively (REPL/notebook).
+# ======================================================================
 
 _NAME_ALIASES = {
     "SIN": "SIN",
@@ -374,6 +422,8 @@ class Waves:
     """
 
     waveform_types = ("SIN", "SQU", "SAW", "TRI", "SIL", "NZE", "ASAW", "ATRI", "ASQU", "SSQU")
+
+    # --- factory + basic oscillator waveforms (delegate to get_wave) ---
 
     @staticmethod
     def make_waveform(waveid, size=256, volume=32767):
@@ -445,19 +495,29 @@ class Waves:
         """Waveform from a list of values, useful for LFOs"""
         return np.array([int(v) for v in vals], dtype=np.int16)
 
+    # --- LFO / position shapes -------------------------------------------
+
     @staticmethod
     def lfo_ramp_up_pos():
-        """Simple two-element ramp-up waveform for synthio.LFO (which does interpolation)"""
-        return np.array((0, 32767), dtype=np.int16)
+        """Simple two-element ramp-up waveform for synthio.LFO (which does
+        interpolation). A fresh array, NOT ramp_wave()'s cached one -- that
+        one is shared (by _vib_fade, _glide_pos, and the wavetable-LFO
+        once=True shapes) and its own docstring says so; aliasing it here
+        would let an interactive caller mutate it and silently break every
+        synth using it."""
+        return np.array((0, ENV_PEAK), dtype=np.int16)
 
     @staticmethod
     def lfo_ramp_down_pos():
-        """Simple two-element row-downwaveform for synthio.LFO (which does interpolation)"""
+        """Simple two-element ramp-down waveform for synthio.LFO (which does interpolation)"""
         return np.array((32767, 0), dtype=np.int16)
 
     @staticmethod
     def lfo_triangle_pos():
-        """Simple three-element triangle waveform for synthio.LFO (which does interpolation)"""
+        """Simple three-element triangle waveform for synthio.LFO (which does
+        interpolation). NOT the same shape as saw_wave() once looped -- see
+        saw_wave()'s docstring for why a short buffer's wrap interpolates
+        back to a triangle rather than a sawtooth."""
         return np.array((0, 32767, 0), dtype=np.int16)
 
     @staticmethod
@@ -465,18 +525,7 @@ class Waves:
         """Simple four-element triangle waveform for synthio.LFO (which does interpolation)"""
         return np.array((0, 32767, 0, -32767), dtype=np.int16)
 
-    @staticmethod
-    def from_ar_times(attack_time=1, release_time=1):
-        """
-        Generate a fake Attack/Release 'Envelope' using an LFO waveform.
-        This is a dumb way of doing it, but since we cannot get .value()
-        out of Envelope, we have to fake it with an LFO.
-        """
-        a10 = int(attack_time * 10)
-        r10 = int(release_time * 10)
-        a = [i * 65535 // a10 - 32767 for i in range(a10)]
-        r = [32767 - i * 65535 // r10 for i in range(r10)]
-        return Waves.from_list(a + [32767] + r)
+    # --- WAV file I/O ------------------------------------------------------
 
     @staticmethod
     def wav(filepath, size=256, pos=0):
