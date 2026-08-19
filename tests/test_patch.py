@@ -46,6 +46,20 @@ r = Patch.from_json(p2.to_json())
 ck(r.wave_file == "/wt.wav" and r.wave_pos == 3.5,
    "style-specific fields must round-trip without subclassing")
 
+p3 = Patch(wave_pos_max=5.5, wave_lfo_rate=1.25, wave_lfo_shape="saw",
+           wave_lfo_once=True, wave_lfo_vel=0.75)
+r3 = Patch.from_json(p3.to_json())
+ck(r3.wave_pos_max == 5.5 and r3.wave_lfo_rate == 1.25
+   and r3.wave_lfo_shape == "saw" and r3.wave_lfo_once is True
+   and r3.wave_lfo_vel == 0.75,
+   "wave-LFO fields must round-trip without subclassing, like wave_pos/wave_file")
+
+legacy2 = Patch.from_json('{"name":"old","filt_f":900}')
+ck(not hasattr(legacy2, "wave_pos_max"),
+   "a patch saved before the wave-position LFO existed must simply lack "
+   "the field -- WavetableSynth._recompile()'s getattr(p, 'wave_pos_max', "
+   "wave_pos) supplies the off default, same as wave_pos/wave_file today")
+
 ck(p.filt_vel == 0, "default filt_vel should be 0 (velocity changes nothing)")
 ck(p.fenv_vel == 0.0, "default fenv_vel should be 0.0")
 ck(p.filt_lfo_amount == 0, "default filt_lfo_amount should be 0 (LFO off)")

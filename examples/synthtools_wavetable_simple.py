@@ -1,31 +1,29 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 Tod Kurt
+# SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
 # SPDX-License-Identifier: MIT
 
 import time
 
-import synthio
-import ulab.numpy as np
-from synth_setup import knobA, synth
+from synth_setup import knobA
+from synth_setup import synth as engine
 
-from synthtools.wavetable import Wavetable
+from synthtools import Patch, WavetableSynth
 
 wavetable_fname = "/wavetables/PLAITS02.WAV"  # from http://waveeditonline.com/
 
-wavetable1 = Wavetable(wavetable_fname)
+# fmt: off
+patch1 = Patch(name="wavetable scan", synth_type="wavetable",
+               wave_file=wavetable_fname, wave_pos=0,
+               wave_lfo_rate=0.05, wave_lfo_shape="saw", wave_lfo_once=False)
+# fmt: on
 
-midi_note = 48
-note = synthio.Note(synthio.midi_to_hz(midi_note), waveform=wavetable1.waveform)
-synth.press(note)
+wt = WavetableSynth(engine, patch1)
+wt.wave_pos_max = wt.num_waves - 1  # sweep across the whole wavetable
 
-# create a positive ramp-up-down LFO to scan through the waveetable
-wave_lfo = synthio.LFO(rate=0.05, waveform=np.array((0, 32767), dtype=np.int16))
-wave_lfo.scale = wavetable1.num_waves
-synth.blocks.append(wave_lfo)  # this activates LFO when not attached to Note
+wt.note_on(48)
 
 while True:
-    # regularly copy LFO to wave_pos by hand
-    wave_pos = wave_lfo.value
-    wavetable1.set_wave_pos(wave_pos)
-    wave_lfo.rate = (knobA.value / 65535) * 0.25
-    print("wave_pos:%.2f" % wave_pos)
+    # the wave-position LFO lives outside the synthio block graph -- it has
+    # to be pushed into the wavetable buffer by hand, as often as possible
+    wt.update()
+    wt.wave_lfo_rate = (knobA.value / 65535) * 0.25
     time.sleep(0.01)
