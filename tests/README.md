@@ -61,6 +61,12 @@ evidence that the pure-Python fallback is faithful.
   state** — a knob turn must not reach it, `amp_env` must be copied rather than
   aliased in both directions, and `save_patch()` must commit everything
   including subclass params.
+- `test_fm_synth.py` — `FMSynth` against the synthio stubs: that a per-voice
+  audio-rate modulator rides on `note.bend`, that its ratio and index are shared
+  blocks nested under it (one write reaches voices already sounding), that each
+  voice gets its own LFO (rate bakes in its own pitch) while the shared parts
+  stay shared, and that `fm_index` 0 builds no per-voice node at all. Plus the
+  `fm_*` patch fields round-trip and stay out of the live patch until saved.
 - `stubs/synthio.py` — no DSP. `Math`/`LFO` resolve nested blocks so `.value`
   is meaningful, which is what makes block-graph assertions possible. It
   implements only the five `MathOperation`s synthtools' engine uses, with the arithmetic

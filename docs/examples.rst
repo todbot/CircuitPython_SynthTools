@@ -44,6 +44,15 @@ Show how to use Synth's pitch modulation features
     :caption: examples/synthtools_pitch_demo.py
     :linenos:
 
+FM synth demo
+-------------
+
+A bright DX-style FM bell using FMSynth, with a live fm_ratio / fm_index sweep
+
+.. literalinclude:: ../examples/synthtools_fm_demo.py
+    :caption: examples/synthtools_fm_demo.py
+    :linenos:
+
 
 
  
