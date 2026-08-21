@@ -3,9 +3,8 @@
 """Patch round-trip checks -- the one module that needs no stubs at all.
 
 patch.py imports only `json`, so this runs on a bare interpreter and is
-the cheapest place to catch the MicroPython idiom bugs listed in
-CLAUDE-synthlib.md section 7 (read-only instance __dict__, dict.update
-keywords).
+the cheapest place to catch MicroPython idiom bugs
+(read-only instance __dict__, dict.update keywords).
 
     python3 tests/test_patch.py
     micropython tests/test_patch.py

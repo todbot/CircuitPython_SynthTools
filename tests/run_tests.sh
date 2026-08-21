@@ -12,7 +12,7 @@
 #
 # CPython gives real numpy, so it is the tier that means anything numerically.
 # MicroPython uses the pure-Python ulab fallback and is the tier that catches
-# the portability bugs in CLAUDE-synthlib.md section 7.
+# portability bugs.
 
 cd "$(dirname "$0")/.." || exit 1
 

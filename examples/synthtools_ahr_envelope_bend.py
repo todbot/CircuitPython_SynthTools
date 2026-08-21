@@ -18,10 +18,7 @@
 #
 # `bend` is a live block, so wiring it straight into Note(bend=bend) is the
 # whole hookup -- no synth.blocks.append() needed, because the block is
-# reachable through the sounding Note itself (see CLAUDE.md's "anything not
-# reachable from a sounding Note" rule; that rule is about SHARED nodes
-# nothing points at yet, and this one is pointed at from the moment it's
-# built).
+# reachable through the sounding Note itself
 #
 # --- bend units ------------------------------------------------------------
 # 1.0 = ONE OCTAVE, so amount=0.5 below is half an octave (6 semitones).
@@ -42,8 +39,7 @@
 # penv_out_amount does at the SubtractiveSynth level.
 #
 # --- why the Note gets its own envelope ---------------------------------
-# The AHR envelope only ticks while its Note is alive (CLAUDE.md's "three
-# reasons a filter envelope is inaudible", #3 applies here too), so the AHR
+# The AHR envelope only ticks while its Note is alive, so the AHR
 # release has to fit inside the amp envelope's release or the voice is
 # freed mid-bend. An explicit envelope on the Note keeps that relationship
 # visible here instead of depending on whatever synth_setup.py happens to

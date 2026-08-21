@@ -2,9 +2,8 @@
 # SPDX-License-Identifier: MIT
 """Integration checks for synthtools' Synth against the synthio stubs.
 
-Proves the things CLAUDE-synthlib.md sections 4-5 depend on: block identity
-and sharing, in-place buffer rewrites, param routing, and -- new -- that the
-patch is NOT live state. No DSP: the stubs do not render audio.
+Proves: block identity and sharing, in-place buffer rewrites, param routing,
+and -- new -- that the patch is NOT live state. No DSP: the stubs do not render audio.
 
 The filter cutoff bus:
 

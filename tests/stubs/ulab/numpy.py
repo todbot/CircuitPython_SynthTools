@@ -5,13 +5,13 @@
 Two backends, picked automatically:
 
 * **CPython** hands off to real numpy. That gives genuine float and int16
-  semantics, which is what the numeric tests need -- CLAUDE-synthlib.md
+  semantics, which is what the numeric tests need.
   section 9 says to use real numpy for numeric questions, and that is how
   the int16 lerp overflow in section 8 was pinned down.
 
 * **MicroPython** has no numpy, so we fall back to a small pure-Python
   wrapper implementing just the surface synthlib/waves.py uses. This is
-  the tier that catches the portability class of bug (section 7).
+  the tier that catches the portability class of bug
 
 A ``list`` subclass does NOT work as the array type: MicroPython's
 ``list.__setitem__`` rejects a non-list right-hand side, so ``buf[:n] =
