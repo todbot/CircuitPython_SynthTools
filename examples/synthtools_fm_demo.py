@@ -21,6 +21,13 @@ patch1 = Patch(name="fm bell", synth_type="fm", wave="SIN",
 
 synth = FMSynth(engine, patch1)
 
+# `wave` only sounds while FM is off (fm_index == 0): the baked FM table is
+# always a sine carrier, so there's no "wave" to pick while FM is on. Every
+# 16 notes this demo drops fm_index to 0 for a 16-note break and steps
+# through this list, so you hear the plain-oscillator fallback too.
+break_waves = ("SIN", "SAW", "SQU", "ASAW")
+wave_i = 0
+
 melody = (60, 64, 67, 72, 67, 64)
 i = 0
 while True:
@@ -31,12 +38,27 @@ while True:
     time.sleep(0.03)
     i += 1
 
-    # live FM: each write rewrites the shared PM table in place, reaching
-    # every voice using it, O(1) in polyphony. fm_ratio must stay an
-    # integer -- non-integer ratios buzz at the waveform's loop point.
-    if i % 16 == 0:
-        synth.fm_ratio = 1 if synth.fm_ratio >= 3 else synth.fm_ratio + 1
-    if i % 8 == 0:
-        synth.fm_index = 2.0 if synth.fm_index == 0.5 else 0.5
+    # 32-note cycle: 16 notes of FM bell, 16 notes of plain oscillator.
+    segment = i % 32
+    if segment == 16:
+        synth.fm_index = 0.0  # FM off; wave takes over for this break
+        synth.wave = break_waves[wave_i % len(break_waves)]
+        wave_i += 1
+    elif segment < 16:
+        # live FM: each write rewrites the shared PM table in place, reaching
+        # every voice using it, O(1) in polyphony. fm_ratio must stay an
+        # integer -- non-integer ratios buzz at the waveform's loop point.
+        # fm_index was left at 0 by the break above, so the toggle below
+        # also turns FM back on again at segment 0.
+        if i % 16 == 0:
+            synth.fm_ratio = 1 if synth.fm_ratio >= 3 else synth.fm_ratio + 1
+        if i % 8 == 0:
+            synth.fm_index = 2.0 if synth.fm_index == 0.5 else 0.5
 
-    print("fm_ratio: %d  fm_index: %.1f  wave: %s" % (synth.fm_ratio, synth.fm_index, synth.wave))
+    # `wave` is only what's actually sounding while FM is off -- once FM
+    # turns back on, `synth.wave` still reads back the last break's name
+    # even though it's no longer in use, so don't print it as if it were.
+    if synth.fm_index:
+        print("FM bell  fm_ratio: %d  fm_index: %.1f" % (synth.fm_ratio, synth.fm_index))
+    else:
+        print("plain osc  wave: %s" % synth.wave)
