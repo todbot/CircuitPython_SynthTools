@@ -107,9 +107,12 @@ What's Included
 * ``Synth`` -- synth engine base: shared voice, patch, and modulation handling,
   with ``mono`` mode for a single-voice synth with ``glide_time``  portamento
 * ``SubtractiveSynth`` -- subtractive two-oscillator synth w/ detune
-* ``FMSynth`` -- frequency-modulation voice: an audio-rate modulator LFO on
-  ``note.bend``, with ``fm_ratio``/``fm_index``/``fm_wave``. ``fm_index`` is
-  in bend units (1.0 = one octave), 0 = plain single-oscillator
+* ``FMSynth`` -- two-operator phase-modulation voice: a carrier waveform
+  pre-rendered from ``sin(theta + fm_index*sin(fm_ratio*theta))``.
+  ``fm_ratio`` must be an integer; ``fm_index`` is PM depth in radians,
+  0 = plain single-oscillator. (Not a live audio-rate bend modulator --
+  synthio's Math/LFO blocks only update every 256 samples, too slow for
+  that; see the module docstring for why.)
 * ``WavetableSynth`` -- wavetable-playback with adjustable wave_pos
 * ``BasslineSynth`` -- TB-303-style acid bassline: monophonic, one
   oscillator, a decay-only filter sweep, per-step slide and accent. Can

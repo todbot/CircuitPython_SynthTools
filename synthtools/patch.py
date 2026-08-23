@@ -62,12 +62,14 @@ class Patch:
         self.filt_vel = 0  # Hz of cutoff at full velocity; negative
         #                       means hard playing CLOSES the filter
         self.fenv_vel = 0.0  # 0 = uniform depth, 1.0 = depth tracks velocity
-        # No FM by default: fm_index 0 means no per-voice modulator node is
-        # built, so a plain Patch costs nothing extra. fm_index is in the
-        # same bend units as vib_depth/penv_amount (1.0 = one octave).
-        self.fm_ratio = 1.0  # FM modulator frequency, as a multiple of the carrier
-        self.fm_index = 0.0  # FM depth in octaves of bend; 0 = off
-        self.fm_wave = "SIN"  # FM modulator waveform name, see waves.py
+        # No FM by default: fm_index 0.0 means the plain `wave` oscillator is
+        # used, so a plain Patch costs nothing extra. FM here is a baked
+        # phase-modulation carrier waveform (see fm_synth.py), not a live
+        # audio-rate modulator -- synthio's Math/LFO blocks only update
+        # every 256 samples (172 Hz), far too slow for that.
+        self.fm_ratio = 1  # modulator cycles per carrier cycle; MUST be an
+        #                      integer, or the waveform buzzes at its loop point
+        self.fm_index = 0.0  # PM depth in radians; 0 = off (plain `wave` used)
         # setattr loop, not self.__dict__.update(kw): CircuitPython's
         # instance __dict__ is a read-only mapping and update() raises
         # TypeError. Reading it (dict(self.__dict__)) is fine.

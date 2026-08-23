@@ -1,94 +1,111 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
 # SPDX-License-Identifier: MIT
 #
-# fm_synth.py - a two-oscillator frequency-modulation synth voice, built on
-# the Synth engine (synth.py).
+# fm_synth.py - a two-operator phase-modulation synth voice, built on the
+# Synth engine (synth.py).
 #
-# --- how FM happens in synthio ------------------------------------------
+# Original idea: audio-rate modulator on note.bend
 #
-# synthio has no first-class FM. Note.frequency is a plain float, not a
-# BlockInput, so nothing can ride on it; the only pitch input that takes a
-# live block is note.bend. So FM here is an audio-rate LFO summed onto that
-# bend -- one small block graph per voice:
+# The obvious design is a per-voice LFO summed onto note.bend
+# (the only pitch input that takes a live block):
 #
-#   VOICE:  note.bend = SUM(shared_bend_graph, fm_lfo)
-#           fm_lfo    = LFO(waveform = shared modulator wave,
-#                           rate     = PRODUCT(carrier_hz, fm_ratio_blk),
-#                           scale    = fm_index_blk, offset = 0)
+#   note.bend = SUM(shared_bend_graph, fm_lfo)
+#   fm_lfo    = LFO(waveform=modulator_wave, rate=carrier_hz * fm_ratio,
+#                    scale=fm_index)
 #
-# In most other synthesisers this is called "linear FM" -- the modulator adds
-# Hz to the carrier. synthio's bend is multiplicative (frequency * 2**bend),
-# so this is "exponential FM", the arrangement most early digital synths and
-# analog-modelled ones used. It is proportionally richer in high partials and
-# can break up aggressively; a low-pass filter after the voice is the
-# traditional tamer -- the shared Synth filter graph is right there.
+# This does not work. synthio's Math/LFO blocks only recompute their VALUE
+# once every 256 samples -- 172 Hz at 44.1 kHz.
+# Any modulator above ~86 Hz (half that rate) aliases. Middle C
+# with fm_ratio=1 puts the modulator at 261.6 Hz, which zero-order-hold folds
+# down to 89 Hz; one semitone up drags that alias to 105 Hz -- a 6% pitch
+# change swinging the perceived modulation rate 17% the wrong way.
+# This mechanism cannot render real FM sidebands.
 #
-# --- the two FM knobs ---------------------------------------------------
+# Alternate idea: baked-in phase-modulation carrier
 #
-# fm_ratio - modulator frequency as a multiple of the carrier (0.5, 1, 2, ...).
-#            Stored as a shared scalar block. Each voice's LFO rate is
-#            PRODUCT(carrier_hz, that block), so one write reaches every
-#            sounding voice -- O(1) in polyphony, even mid-note.
+# Classic 2-operator FM/PM is:
 #
-# fm_index - FM depth in bend units, where 1.0 = one octave (the same unit
-#            synth.py already uses for vib_depth and penv_amount). At index I
-#            the modulator swings the carrier pitch by a factor of 2**I before
-#            snapping back each cycle. 0 = off, and costs nothing: no per-voice
-#            LFO is built at all. 0.5 - 2.0 is a useful starting range.
+#   sin(2*pi*t + index * sin(2*pi*ratio*t))
 #
-# --- the honest caveats -------------------------------------------------
+# which is periodic in ONE carrier cycle whenever ratio is an integer, so it
+# can be pre-rendered into an ordinary single-cycle waveform table -- the
+# same kind of buffer waves.py already builds for SAW/SIN/TRI, just computed
+# with waves.fill_pm_wave() instead of a closed-form builder. That sidesteps
+# the block-rate ceiling as there is no per-sample modulation to keep
+# up with at note-on, the sidebands are already IN the waveform before the
+# note ever plays.  Basically this is a wavetable.
 #
-# - Not band-limited. synthio resamples the carrier waveform but does not
-#   anti-alias the FM sidebands, so high indexes on high notes fold back
-#   noise. Keep the sample rate up and the index modest, or filter after.
-# - No feedback. A classic DX "feedback" operator reads its own output, which
-#   the synthio block graph cannot express (no cycles). The closest stand-in
-#   is an audiofilters.Distortion after the voice.
+# The buffer is shared and rewritten in place (see fill_pm_wave()'s
+# docstring), so turning fm_ratio or fm_index is one array rewrite that
+# reaches every voice already sounding it, same as how AHREnvelope buffer works.
 #
-# Both are inherent to synthio, not gaps this file could have filled.
+# Caveats:
+#
+# - fm_ratio MUST be an integer. A non-integer ratio makes the modulator's
+#   phase land somewhere other than a multiple of 2*pi
+# - Sine carrier, sine modulator only. Phase-distorting an arbitrary carrier
+#   table (a Casio-CZ-style approach) would need fancy-indexed gather, which
+#   the MicroPython ulab fallback this project also tests against does not
+#   implement (see tests/stubs/ulab/numpy.py).
+# - fm_index is now RADIANS of phase modulation:
+#   0 = off, 1-3 = classic FM, 5+ = harsh.
+# - No live continuous sweep of fm_index/fm_ratio mid-note the way a true
+#   audio-rate modulator would give: turning the knob rewrites the shared
+#   table, which every voice picks up on its next few samples, not a smooth
+#   per-sample glide. For the kind of movement a filter envelope gives a
+#   subtractive voice, sweep filt_f/fenv_amount as usual -- the FM timbre
+#   itself changes in discrete-but-live table rewrites, not a continuous
+#   ramp.
+# - Not band-limited past the table itself: a 256-sample table represents at
+#   most 128 harmonics, and PM energy spreads out to roughly
+#   ratio * (index + 1) harmonics, so a high ratio/index combination is
+#   aliased before the note is even played. Keep both modest (see
+#   fill_pm_wave()).
+# - No feedback operator. A DX "feedback" operator reads its own output, a
+#   cycle no DAG (and no pre-rendered table) can express.
+#   But can use audiofilters.Distortion after the voice to get some wavefolding.
 
 import synthio
+import ulab.numpy as np
 
-from .blocks import product, scalar_block, sum3
 from .synth import Synth
-from .waves import get_wave, get_wave_2x, random_phase_wave
+from .waves import fill_pm_wave, get_wave_2x, random_phase_wave
 
-#: single-cycle size of the modulator waveform table, same as the carrier
+#: single-cycle size of the baked PM carrier table
 FM_WAVE_SIZE = 256
 
 
 class FMSynth(Synth):
-    """A frequency-modulation voice: one carrier oscillator whose pitch is
-    bent (via ``note.bend``, the only live pitch input synthio offers) by an
-    audio-rate modulator LFO.
+    """A two-operator phase-modulation voice: a carrier waveform pre-rendered
+    from ``sin(theta + index * sin(ratio * theta))``, through the shared
+    ``Synth`` filter/envelope graph.
 
-    Patch fields, on top of the shared Synth ones:
+    Patch fields, on top of the shared ``Synth`` ones:
 
-        fm_ratio  modulator frequency, as a ratio of the carrier
-        fm_index  FM depth, in bend units (octaves); 0 = off
-        fm_wave   modulator waveform name (any ``waves`` name, default SIN)
+        fm_ratio  modulator cycles per carrier cycle -- MUST be a
+                  non-negative integer (see the module docstring for why)
+        fm_index  PM depth in radians; 0 = off, uses the plain ``wave``
+                  oscillator instead, at the ordinary Synth voice cost
 
-    ``fm_ratio`` and ``fm_index`` are shared blocks nested in every voice's FM
-    node, so each is ONE write that reaches every sounding note -- including
-    ones already pressed -- at any polyphony. ``fm_index`` of 0 builds no
-    per-voice node at all, so a patch without FM costs exactly what a plain
-    ``Synth`` voice costs.
+    ``fm_ratio`` and ``fm_index`` share ONE table, rewritten in place on
+    every change -- one write reaches every sounding voice using it,
+    regardless of polyphony, the same idiom ``fill_env_rise()`` uses for the
+    filter/pitch envelope shape.
     """
 
-    _PARAMS = Synth._PARAMS + ("wave", "fm_ratio", "fm_index", "fm_wave")
+    _PARAMS = Synth._PARAMS + ("wave", "fm_ratio", "fm_index")
 
     # class attrs: base __init__ builds its graph before this subclass has run
     # any setup of its own, so a patch-less FMSynth(engine) still plays
     _wave_name = "SAW"
-    _fm_wave_name = "SIN"
-    _fm_wave = None
+    _fm_ratio = 1
+    _fm_index = 0.0
 
     def __init__(self, synthesizer, patch=None):
-        # Shared FM blocks are created HERE, before super().__init__() runs
-        # its load_patch() -> _recompile(): they must exist by then, and must
-        # never be replaced -- sounding voices keep references across loads.
-        self._fm_ratio_blk = scalar_block(1.0)
-        self._fm_index_blk = scalar_block(0.0)
+        # The shared PM table is created HERE, before super().__init__()
+        # runs its load_patch() -> _recompile(): it must exist by then, and
+        # must never be replaced -- sounding voices keep a reference to it.
+        self._pm_wave = np.zeros(FM_WAVE_SIZE, dtype=np.int16)
         super().__init__(synthesizer, patch)
 
     def _recompile(self):
@@ -96,48 +113,34 @@ class FMSynth(Synth):
         p = self.patch
         self._wave_name = p.wave
         get_wave_2x(self._wave_name)  # warm the carrier cache; note-on only slices
-        self._fm_ratio_blk.a = p.fm_ratio
-        self._fm_index_blk.a = p.fm_index
-        self._fm_wave_name = p.fm_wave
-        self._fm_wave = get_wave(self._fm_wave_name, size=FM_WAVE_SIZE)
+        self._fm_ratio = max(0, int(round(p.fm_ratio)))
+        self._fm_index = p.fm_index
+        fill_pm_wave(self._pm_wave, self._fm_ratio, self._fm_index)
 
     def _decompile(self):
         super()._decompile()
         p = self.patch
         p.wave = self._wave_name
-        p.fm_ratio = self._fm_ratio_blk.a
-        p.fm_index = self._fm_index_blk.a
-        p.fm_wave = self._fm_wave_name
-
-    def _make_fm_modulator(self, carrier_hz):
-        """This voice's audio-rate modulator, riding on note.bend.
-
-        Per voice: the rate Math bakes in this note's carrier frequency, so
-        it cannot be shared -- but the ratio and index nested inside it ARE
-        the shared blocks, so both knobs stay one write and stay live for a
-        note that is already sounding.
-        """
-        return synthio.LFO(
-            waveform=self._fm_wave,
-            rate=product(carrier_hz, self._fm_ratio_blk),
-            scale=self._fm_index_blk,
-        )
+        p.fm_ratio = self._fm_ratio
+        p.fm_index = self._fm_index
 
     def _make_notes(self, midi_note, velocity):
         f = synthio.midi_to_hz(midi_note)
-        bend = self._bend_cur
-        if self._fm_index_blk.a:
-            bend = sum3(bend, self._make_fm_modulator(f))
+        if self._fm_index:
+            waveform = self._pm_wave  # shared table: no random phase, see above
+        else:
+            waveform = random_phase_wave(self._wave_name)
         # fmt: off
-        return (synthio.Note(f, waveform=random_phase_wave(self._wave_name),
+        return (synthio.Note(f, waveform=waveform,
                              envelope=self._env, amplitude=velocity / 127,
-                             filter=self._make_filter(), bend=bend),)
+                             filter=self._make_filter(), bend=self._bend_cur),)
         # fmt: on
 
     # --- live parameters ------------------------------------------------
     # Every setter writes live state ONLY; the patch is not touched until
-    # save_patch(). fm_ratio and fm_index are each one write into a shared
-    # block, O(1) in polyphony, reaching voices already sounding.
+    # save_patch(). fm_ratio and fm_index each rewrite the ONE shared PM
+    # table in place, reaching every sounding voice using it, O(1) in
+    # polyphony -- no per-voice node to find or update.
 
     @property
     def wave(self):
@@ -150,30 +153,18 @@ class FMSynth(Synth):
 
     @property
     def fm_ratio(self):
-        return self._fm_ratio_blk.a
+        return self._fm_ratio
 
     @fm_ratio.setter
     def fm_ratio(self, v):
-        self._fm_ratio_blk.a = v  # one write, reaches every sounding voice
+        self._fm_ratio = max(0, int(round(v)))
+        fill_pm_wave(self._pm_wave, self._fm_ratio, self._fm_index)
 
     @property
     def fm_index(self):
-        return self._fm_index_blk.a
+        return self._fm_index
 
     @fm_index.setter
     def fm_index(self, v):
-        # One write into the shared block every voice's LFO scale is nested
-        # on. Note: if index was 0 at note-on no LFO was built for that
-        # voice, so raising it from 0 only affects new notes -- the same
-        # rule as fenv_amount.
-        self._fm_index_blk.a = v
-
-    @property
-    def fm_wave(self):
-        return self._fm_wave_name
-
-    @fm_wave.setter
-    def fm_wave(self, v):
-        self._fm_wave_name = v
-        self._fm_wave = get_wave(v, size=FM_WAVE_SIZE)  # next note-on uses it
-        self._fm_wave = get_wave(v, size=FM_WAVE_SIZE)  # next note-on uses it
+        self._fm_index = v
+        fill_pm_wave(self._pm_wave, self._fm_ratio, self._fm_index)
