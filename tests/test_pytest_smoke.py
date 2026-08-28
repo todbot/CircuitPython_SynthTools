@@ -11,7 +11,7 @@ to give it one real, passing item.
 
 This project's actual test suite is plain scripts run via
 `sh tests/run_tests.sh`; see tests/README.md. paramset.py is the one
-module confirmed to need nothing but the stdlib (see CLAUDE.md), so it's
+module confirmed to need nothing but the stdlib, so it's
 the only part of this package pytest can import without a synthio/ulab
 stub -- everything else pulls in synth.py, which imports synthio.
 """

@@ -12,7 +12,7 @@
 #
 # CPython gives real numpy, so it is the tier that means anything numerically.
 # MicroPython uses the pure-Python ulab fallback and is the tier that catches
-# the portability bugs in CLAUDE-synthlib.md section 7.
+# portability bugs.
 
 cd "$(dirname "$0")/.." || exit 1
 
@@ -34,6 +34,7 @@ if command -v python3 >/dev/null 2>&1; then
     run python3 tests/test_patch.py
     run python3 tests/test_env_shapes.py
     run python3 tests/test_wiring.py
+    run python3 tests/test_fm_synth.py
     run python3 tests/test_mono.py
     run python3 tests/test_audio_fx.py
     run python3 tests/test_arpeggiator.py
@@ -46,6 +47,7 @@ if command -v micropython >/dev/null 2>&1; then
     run micropython tests/test_patch.py
     run micropython tests/test_env_shapes.py
     run micropython tests/test_wiring.py
+    run micropython tests/test_fm_synth.py
     run micropython tests/test_mono.py
     run micropython tests/test_audio_fx.py
     run micropython tests/test_arpeggiator.py
