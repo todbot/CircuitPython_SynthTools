@@ -78,7 +78,14 @@ while True:
     # eight separately-tuned notes start.
     print("1: unison -> chorus, on a held drone")
     synth.swarm_spread = 0.0
-    synth.note_on(43, velocity=110)  # G2
+    # glide=0 on every SECTION-OPENING note. mono keeps _last_midi across
+    # silence -- it is never cleared by note_off -- so without this the
+    # first note of a section slides in from the previous section's pitch,
+    # audibly: 5 semitones here and again entering section 3. Slides within
+    # a section are wanted; slides across a two-second gap are not.
+    # (glide=0 does not SKIP the glide, it runs it in 1ms -- inside one
+    # 5.8ms block, so it never renders.)
+    synth.note_on(43, velocity=110, glide=0)  # G2
     time.sleep(1.0)
     sweep("swarm_spread", 0.0, 0.02, 4.0)  # 0 -> +/-24 cents
     time.sleep(1.0)
@@ -90,7 +97,7 @@ while True:
     # chord spread over octaves while the root walks -- glide_time makes
     # each step a slide rather than a jump, so the whole cluster smears.
     print("2: taffy pull -- span opening while the root walks")
-    for i, note in enumerate((43, 46, 50, 53)):
+    for i, note in enumerate((43, 46, 50, 53, 55, 62)):
         synth.note_on(note, velocity=110)
         sweep("swarm_spread", 0.02 + i * 0.12, 0.02 + (i + 1) * 0.12, 1.6)
     time.sleep(1.0)
@@ -107,7 +114,7 @@ while True:
     for drift in (0.0, 0.008):
         synth.swarm_drift = drift
         print("   drift %.3f" % drift)
-        synth.note_on(48, velocity=110)
+        synth.note_on(48, velocity=110, glide=0)  # section opener, see above
         time.sleep(5.0)
         synth.note_off(48)
         time.sleep(1.5)
@@ -119,7 +126,7 @@ while True:
     synth.swarm_spread = 0.015
     for count in (1, 2, 4, 8):
         synth.swarm_count = count
-        synth.note_on(48, velocity=110)
+        synth.note_on(48, velocity=110, glide=0)  # section opener, see above
         time.sleep(2.2)
         synth.note_off(48)
         time.sleep(0.6)
