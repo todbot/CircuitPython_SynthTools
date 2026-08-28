@@ -45,16 +45,30 @@ def vals(a):
 
 
 # --- the package must survive a missing optional dependency --------------
-# synthtools/__init__.py wraps the wavetable import in try/except ImportError
-# so a device without adafruit_wave still gets the rest of the package.
-# There is no adafruit_wave stub here, so that path is exercised every run
+# synthtools/__init__.py resolves names LAZILY (PEP 562), so a missing
+# optional dependency is no longer something the package has to defend
+# against: wavetable is simply never imported unless asked for. That is
+# strictly better than the try/except this file used to carry, where the
+# name silently did not exist and the user got "cannot import name".
+# There is no adafruit_wave stub here, so this path runs every time
 # -- which also means WavetableSynth itself is NOT covered by these tests.
 ck(hasattr(synthtools, "Synth") and hasattr(synthtools, "SubtractiveSynth"),
    "core exports must survive a missing adafruit_wave")
-ck(not hasattr(synthtools, "WavetableSynth"),
-   "without adafruit_wave, WavetableSynth should be absent rather than raising "
-   "-- if this fails, a real adafruit_wave is installed and the graceful "
-   "degradation path is no longer being tested")
+ck(not any(m.endswith(".wavetable") or m.endswith(".wavetable_synth")
+           for m in sys.modules),
+   "importing synthtools must not pull wavetable in at all -- that, not a "
+   "try/except, is what makes a board without adafruit_wave work")
+try:
+    synthtools.WavetableSynth
+    fails.append("WavetableSynth must raise without adafruit_wave -- if this "
+                 "fails, a real adafruit_wave is installed and the "
+                 "missing-dependency path is no longer being tested")
+except ImportError as e:
+    ck("adafruit_wave" in str(e),
+       "the error must NAME the missing dependency, got %r" % (str(e),))
+except AttributeError:
+    fails.append("a missing optional dep must surface as ImportError naming "
+                 "adafruit_wave, not as a bare AttributeError")
 
 # --- patch defaults and JSON round-trip ----------------------------------
 p = Patch()
