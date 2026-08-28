@@ -30,6 +30,7 @@ from .bassline_synth import BasslineSynth
 from .fm_synth import FMSynth
 from .patch import Patch, load_patches, save_patches
 from .subtractive_synth import SubtractiveSynth
+from .swarm_synth import SwarmSynth
 from .synth import Synth
 
 # wavetable_synth needs the adafruit_wave library; don't break the whole

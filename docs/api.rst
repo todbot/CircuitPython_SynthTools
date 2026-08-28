@@ -34,6 +34,12 @@ FM Synth
 .. automodule:: synthtools.fm_synth
     :members:
 
+Swarm Synth
+===========
+
+.. automodule:: synthtools.swarm_synth
+    :members:
+
 Bassline Synth
 ==============
 
