@@ -58,7 +58,7 @@
 import synthio
 
 from .audio_fx import EffectsChain, set_drive, tracking_filter
-from .blocks import clamp, product, sum3
+from .blocks import clamp, sum3
 from .synth import FILTER_MODES, Synth
 from .waves import get_wave
 
@@ -276,14 +276,21 @@ class BasslineSynth(Synth):
         self._build_filter()
         return self._filter
 
-    def _voice_cutoff(self, velocity):
-        """One voice, so one cutoff node: re-aim it instead of rebuilding."""
+    def _voice_cutoff(self, midi_note, velocity):
+        """One voice, so one cutoff node: re-aim it instead of rebuilding.
+
+        Both spare inputs are written on EVERY note, including with 0.0 when
+        the term is off. One node is reused here, so leaving a slot alone
+        would carry the previous note's envelope or tracking offset into a
+        note pressed after the knob went to zero.
+        """
         if self._filt_mode is None:
             return None
         self._build_filter()
+        offsets = self._voice_offsets(midi_note, velocity)
         inner = self._cutoff.a  # the SUM inside the clamp
         inner.b = self._fenv_cur if self._fenv_cur is not None else 0.0
-        inner.c = product(self._filt_vel_blk, velocity / 127.0) if self._filt_vel_blk.a else 0.0
+        inner.c = offsets if offsets is not None else 0.0
         return self._cutoff
 
     def _make_filter(self):
