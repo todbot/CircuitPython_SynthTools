@@ -570,6 +570,16 @@ class Synth:
 
     @property
     def filt_q(self):
+        """Filter resonance, shared by every voice.
+
+        **Useful range is about 0.6 to 6.** Below 0.6 the filter is
+        overdamped and the knob does nothing audible; past 6 it is
+        squealing and close to self-oscillating, so the top of a wider
+        range is travel nobody wants. Size UI ranges to that, and
+        remember that anything adding to resonance -- ``BasslineSynth``'s
+        ``accent_q``, which lands on the same block's spare input -- eats
+        into the same ceiling.
+        """
         return self._filt_q_blk.a
 
     @filt_q.setter

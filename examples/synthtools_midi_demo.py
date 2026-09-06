@@ -40,7 +40,7 @@ UART_TX_PIN = board.GP16
 # fmt: off
 CC_MAP = {
     1:  ("vib_depth",     0.0,   0.05),   # mod wheel -> vibrato depth
-    71: ("filt_q",        0.5,   12.0),   # resonance
+    71: ("filt_q",        0.6,    6.0),   # resonance; see Synth.filt_q
     72: ("release_time",  0.01,  3.0),    # amp envelope  (next note-on)
     73: ("attack_time",   0.0,   2.0),    # amp envelope  (next note-on)
     74: ("filt_f",        100.0, 8000.0), # brightness / cutoff, Hz

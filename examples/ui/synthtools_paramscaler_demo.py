@@ -75,7 +75,7 @@ KNOB_SHIFT = 3  # new reading gets 1/8 weight
 # fmt: off
 PARAMS = (
     ("cutoff",  100.0, 6000.0, "%6.0f Hz", "filt_f"),
-    ("reso",      0.5,   12.0, "%6.1f   ", "filt_q"),
+    ("reso",      0.6,    6.0, "%6.1f   ", "filt_q"),
     ("attack",    0.0,    1.5, "%6.2f s ", "attack_time"),
     ("release",  0.02,    2.0, "%6.2f s ", "release_time"),
 )
