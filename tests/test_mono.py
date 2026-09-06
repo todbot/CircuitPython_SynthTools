@@ -252,6 +252,79 @@ ck(syn.amp_env[1] == before,
    "decay must NOT touch the amp envelope -- the amp has to be able to "
    "outlive the sweep, which is what makes the sweep audible")
 
+# --- keyboard tracking on the ONE shared mono cutoff node ----------------
+# BasslineSynth reuses a single cutoff node across notes, re-aiming its
+# spare .b/.c inputs. That makes a STALE slot the real hazard: turning
+# filt_track off must actually clear the offset, not leave the last note's
+# tracking baked into the node every note after.
+bt = BasslineSynth(synthio.Synthesizer(),
+                   Patch(filt_type="LPF", filt_f=1000, filt_q=1.0,
+                         fenv_amount=0, filt_vel=0, filt_track=1.0))
+bt.note_on(72, velocity=80)   # below accent_velocity: accent writes
+cut = bt._cutoff              # _filt_sum.c and would move the base
+ck(abs(cut.value - 2000.0) < 0.01,
+   "mono full tracking an octave up must double the cutoff, got %r" % cut.value)
+bt.note_off(72)
+
+bt.filt_track = 0.0                       # knob to zero...
+bt.note_on(72, velocity=80)               # ...then press the SAME note again
+ck(abs(cut.value - 1000.0) < 0.01,
+   "with filt_track 0 the shared node must be CLEARED to filt_f, not keep "
+   "the previous note's tracking offset: want 1000, got %r" % cut.value)
+bt.note_off(72)
+
+# and it still reaches a sounding mono voice
+bt.filt_track = 1.0
+bt.note_on(72, velocity=80)
+ck(abs(cut.value - 2000.0) < 0.01, "sanity before the live write")
+bt.filt_track = 0.5
+ck(abs(cut.value - 1500.0) < 0.01,
+   "filt_track must move the sounding mono voice: want 1500, got %r" % cut.value)
+bt.note_off(72)
+
+# --- a glide must NOT drag the releasing previous note ------------------
+# The stolen notes share the bend graph, and _aim_glide points it at the
+# NEW note's starting pitch -- offset by the interval. Without freezing,
+# the still-audible old note is yanked that far too, in the WRONG
+# direction: stepping up 43 -> 46 dropped the sounding 43 three semitones
+# BELOW itself before climbing back (measured on rp2040 as 98.0 -> 81.7 Hz).
+# With a slow attack on the new note that tail is the loudest thing there,
+# so an upward step sounded like it went down.
+gl = SubtractiveSynth(synthio.Synthesizer(), Patch(detune=1.0, glide_time=0.35))
+gl.mono = True
+gl.note_on(43)
+old = list(gl.voices[43])
+before = old[0].bend.value
+gl.note_on(46)                       # step UP a minor third
+after = old[0].bend
+ck(not hasattr(after, "value"),
+   "a stolen note's bend must be FROZEN to a plain number, not left on the "
+   "shared graph the glide is about to move")
+ck(abs(after - before) < 1e-9,
+   "the frozen tail must hold exactly where it was: %r -> %r" % (before, after))
+ck(gl.voices[46][0].bend is gl._bend,
+   "the NEW note must still ride the live shared bend and glide normally")
+ck(gl._glide.a < 0, "...gliding UP into 46, i.e. starting flat")
+
+# with no portamento nothing is frozen -- the tail keeps vibrato and wheel
+nog = SubtractiveSynth(synthio.Synthesizer(), Patch(detune=1.0, glide_time=0.0))
+nog.mono = True
+nog.note_on(43)
+old2 = list(nog.voices[43])
+nog.note_on(46)
+ck(old2[0].bend is nog._bend,
+   "glide_time 0 must leave the tail on the shared bend -- there is no drag "
+   "to prevent, and freezing would needlessly kill its vibrato")
+
+# the per-note glide override counts as portamento too
+ov = SubtractiveSynth(synthio.Synthesizer(), Patch(detune=1.0, glide_time=0.0))
+ov.mono = True
+ov.note_on(43)
+old3 = list(ov.voices[43])
+ov.note_on(46, glide=0.3)
+ck(not hasattr(old3[0].bend, "value"),
+   "note_on(glide=...) must freeze the tail even when glide_time is 0")
+
 if fails:
     print("FAILURES (%d):" % len(fails))
     for f in fails:

@@ -62,6 +62,14 @@ class Patch:
         self.filt_vel = 0  # Hz of cutoff at full velocity; negative
         #                       means hard playing CLOSES the filter
         self.fenv_vel = 0.0  # 0 = uniform depth, 1.0 = depth tracks velocity
+        # 5. Keyboard tracking: the cutoff follows the played pitch, as a
+        #    FRACTION of full tracking rather than Hz. 1.0 = the cutoff
+        #    doubles per octave (so the filter sits at a constant point in
+        #    the harmonic series), 0 = off, 0.5 = half-tracking, and
+        #    NEGATIVE closes the filter as you play higher -- the Swarmatron
+        #    'T' switch's knob sets amount AND direction the same way.
+        #    Pivots at Synth.FILT_TRACK_REF (MIDI 60), where it does nothing.
+        self.filt_track = 0.0
         # No FM by default: fm_index 0.0 means the plain `wave` oscillator is
         # used, so a plain Patch costs nothing extra. FM here is a baked
         # phase-modulation carrier waveform (see fm_synth.py), not a live
