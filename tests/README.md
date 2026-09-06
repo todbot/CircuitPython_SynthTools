@@ -61,6 +61,15 @@ evidence that the pure-Python fallback is faithful.
   state** — a knob turn must not reach it, `amp_env` must be copied rather than
   aliased in both directions, and `save_patch()` must commit everything
   including subclass params.
+- `test_fm_synth.py` — `FMSynth` against the synthio stubs: FM here is a baked
+  phase-modulation CARRIER TABLE, not a live modulator on `note.bend` (synthio's
+  Math/LFO blocks only update every 256 samples, far too slow to render real FM
+  sidebands — see `fm_synth.py`'s module docstring). Checks that the table is
+  ONE shared buffer every FM-on voice's waveform points at, that `fm_ratio`/
+  `fm_index` rewrite it in place and reach voices already sounding, that
+  `fm_ratio` always rounds to a non-negative integer, and that `fm_index` 0
+  falls back to the plain `wave` oscillator at ordinary `Synth` cost. Plus the
+  `fm_*` patch fields round-trip and stay out of the live patch until saved.
 - `stubs/synthio.py` — no DSP. `Math`/`LFO` resolve nested blocks so `.value`
   is meaningful, which is what makes block-graph assertions possible. It
   implements only the five `MathOperation`s synthtools' engine uses, with the arithmetic

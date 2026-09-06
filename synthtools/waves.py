@@ -213,6 +213,31 @@ def wave_names():
     return list(_builders.keys())
 
 
+def fill_pm_wave(buf, ratio, index, volume=28000):
+    """Classic 2-operator phase-modulation carrier, written IN PLACE:
+
+        sin(theta + index * sin(ratio * theta))    theta in [0, 2*pi)
+
+    ``ratio`` MUST be a non-negative integer: the modulator has to complete
+    a whole number of cycles per carrier cycle, or ``buf[-1]`` won't match
+    ``buf[0]`` and every note buzzes at the loop point. ``index`` is the
+    modulation depth in radians (0 = plain sine, 1-3 = classic FM, 5+ =
+    harsh); it does not need clamping since the outer sin() stays in
+    [-1, 1] regardless of depth.
+
+    A ``size``-sample table can only represent up to ``size // 2`` harmonics,
+    and phase modulation spreads energy out to roughly ``ratio * (index+1)``
+    harmonics -- past that the table is aliased before the note is ever
+    played, so keep ratio and index modest for a small buffer.
+
+    Written in place so every voice sharing this buffer (see fm_synth.py)
+    morphs the instant a knob changes, the same idiom as fill_env_rise()."""
+    n = len(buf)
+    theta = np.linspace(0, 2 * np.pi, num=n, endpoint=False)
+    mod = np.sin(theta * ratio) * index
+    buf[:] = np.array(np.sin(theta + mod) * volume, dtype=np.int16)
+
+
 _2x_cache = {}  # (name, size) -> np.array, two cycles of get_wave() back to back
 
 

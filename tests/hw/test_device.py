@@ -37,6 +37,17 @@ for op, a, b, c, want, name in (
     ck(abs(m.value - want) < 0.001, "%s == %s, got %r" % (name, want, m.value))
     engine.blocks.remove(m)
 
+print("--- midi_to_hz: the STUB is not bit-identical, ratios are ----------")
+# synth.py's keyboard tracking (filt_track) uses a RATIO of two midi_to_hz
+# values rather than 2**(n/12), because real synthio and tests/stubs/synthio.py
+# disagree in absolute Hz -- but not on ratios. Pin both facts.
+print("      device midi_to_hz(69) = %.6f (the stub says exactly 440.0)"
+      % synthio.midi_to_hz(69))
+for lo, hi, want, name in ((60, 72, 2.0, "octave"), (60, 84, 4.0, "two octaves")):
+    got = synthio.midi_to_hz(hi) / synthio.midi_to_hz(lo)
+    ck(abs(got - want) < 1e-6,
+       "midi_to_hz ratio over one %s == %s, got %.9f" % (name, want, got))
+
 print("--- PROBE: what does Biquad do with a negative frequency? --------")
 # This is why the cutoff bus is clamped with MID. If Biquad turns out to
 # handle it gracefully, FILT_F_MIN/FILT_F_MAX and both clamp blocks can go.

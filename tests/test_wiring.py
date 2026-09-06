@@ -2,9 +2,8 @@
 # SPDX-License-Identifier: MIT
 """Integration checks for synthtools' Synth against the synthio stubs.
 
-Proves the things CLAUDE-synthlib.md sections 4-5 depend on: block identity
-and sharing, in-place buffer rewrites, param routing, and -- new -- that the
-patch is NOT live state. No DSP: the stubs do not render audio.
+Proves: block identity and sharing, in-place buffer rewrites, param routing,
+and -- new -- that the patch is NOT live state. No DSP: the stubs do not render audio.
 
 The filter cutoff bus:
 
@@ -29,7 +28,7 @@ sys.path.insert(0, _D + "/..")
 
 import synthio  # noqa: E402
 import synthtools  # noqa: E402
-from synthtools import Patch, SubtractiveSynth  # noqa: E402
+from synthtools import Patch, SubtractiveSynth, Synth  # noqa: E402
 from synthtools.ahr_envelope import AHREnvelope  # noqa: E402
 from synthtools.waves import ENV_PEAK  # noqa: E402
 
@@ -46,16 +45,30 @@ def vals(a):
 
 
 # --- the package must survive a missing optional dependency --------------
-# synthtools/__init__.py wraps the wavetable import in try/except ImportError
-# so a device without adafruit_wave still gets the rest of the package.
-# There is no adafruit_wave stub here, so that path is exercised every run
+# synthtools/__init__.py resolves names LAZILY (PEP 562), so a missing
+# optional dependency is no longer something the package has to defend
+# against: wavetable is simply never imported unless asked for. That is
+# strictly better than the try/except this file used to carry, where the
+# name silently did not exist and the user got "cannot import name".
+# There is no adafruit_wave stub here, so this path runs every time
 # -- which also means WavetableSynth itself is NOT covered by these tests.
 ck(hasattr(synthtools, "Synth") and hasattr(synthtools, "SubtractiveSynth"),
    "core exports must survive a missing adafruit_wave")
-ck(not hasattr(synthtools, "WavetableSynth"),
-   "without adafruit_wave, WavetableSynth should be absent rather than raising "
-   "-- if this fails, a real adafruit_wave is installed and the graceful "
-   "degradation path is no longer being tested")
+ck(not any(m.endswith(".wavetable") or m.endswith(".wavetable_synth")
+           for m in sys.modules),
+   "importing synthtools must not pull wavetable in at all -- that, not a "
+   "try/except, is what makes a board without adafruit_wave work")
+try:
+    synthtools.WavetableSynth
+    fails.append("WavetableSynth must raise without adafruit_wave -- if this "
+                 "fails, a real adafruit_wave is installed and the "
+                 "missing-dependency path is no longer being tested")
+except ImportError as e:
+    ck("adafruit_wave" in str(e),
+       "the error must NAME the missing dependency, got %r" % (str(e),))
+except AttributeError:
+    fails.append("a missing optional dep must surface as ImportError naming "
+                 "adafruit_wave, not as a bare AttributeError")
 
 # --- patch defaults and JSON round-trip ----------------------------------
 p = Patch()
@@ -652,6 +665,91 @@ for fv, filt_vel in ((0.0, 0), (0.75, 0), (0.75, 2000)):
 
 print("shape linear:", [lin_shape[i] for i in (0, 16, 32, 48, 63)])
 print("shape curve2:", [cur_shape[i] for i in (0, 16, 32, 48, 63)])
+# --- keyboard tracking: filt_track ---------------------------------------
+# The Swarmatron's 'T' switch: the cutoff follows the BASE pitch, with the
+# knob setting amount AND direction. Same idiom as filt_vel -- a per-voice
+# constant from the note, times a shared block that stays live inside the
+# graph -- so this is Synth behaviour, not a swarm-specific one.
+st = SubtractiveSynth(sio, Patch(filt_type="LPF", filt_f=1000, filt_q=1.0,
+                                 fenv_amount=0, filt_vel=0, filt_track=0.0))
+
+# off by default: no per-voice node at all, just the shared base
+st.note_on(60)
+ck(st.voices[60][0].filter.frequency is st._filt_base,
+   "filt_track 0 must allocate NO per-voice cutoff node")
+st.note_off(60)
+
+# full tracking: an octave up must double the cutoff, exactly
+st.filt_track = 1.0
+for note, want in ((60, 1000.0), (72, 2000.0), (48, 500.0)):
+    st.note_on(note)
+    got = st.voices[note][0].filter.frequency.value
+    ck(abs(got - want) < 0.01,
+       "filt_track 1.0: note %d must sit at %.1f Hz, got %.4f" % (note, want, got))
+    st.note_off(note)
+
+# the pivot note is untouched whatever the amount
+for amt in (-1.0, 0.5, 2.0):
+    st.filt_track = amt
+    st.note_on(Synth.FILT_TRACK_REF)
+    ck(abs(st.voices[Synth.FILT_TRACK_REF][0].filter.frequency.value - 1000.0) < 0.01,
+       "FILT_TRACK_REF must read filt_f at filt_track %r" % amt)
+    st.note_off(Synth.FILT_TRACK_REF)
+
+# negative = inverse: playing higher CLOSES the filter
+st.filt_track = -1.0
+st.note_on(72)
+ck(st.voices[72][0].filter.frequency.value < 1000.0,
+   "negative filt_track must close the filter as pitch rises, got %r"
+   % st.voices[72][0].filter.frequency.value)
+st.note_off(72)
+
+# THE point: both knobs stay LIVE inside a sounding voice's tracking node
+st.filt_track = 1.0
+st.note_on(72)
+cut = st.voices[72][0].filter.frequency
+ck(abs(cut.value - 2000.0) < 0.01, "sanity before the live writes")
+st.filt_track = 0.5                       # half tracking, mid-note
+ck(abs(cut.value - 1500.0) < 0.01,
+   "writing filt_track must move a SOUNDING voice: want 1500, got %r" % cut.value)
+st.filt_f = 2000                          # and filt_f still reaches it too
+ck(abs(cut.value - 3000.0) < 0.01,
+   "filt_f must still reach the same sounding voice: want 3000, got %r" % cut.value)
+st.note_off(72)
+st.filt_f = 1000
+
+# a big negative tracking on a high note is clamped, not negative
+st.filt_track = -4.0
+st.note_on(96)
+ck(st.voices[96][0].filter.frequency.value >= Synth.FILT_F_MIN,
+   "a large negative filt_track must be caught by the existing clamp, got %r"
+   % st.voices[96][0].filter.frequency.value)
+st.note_off(96)
+st.filt_track = 0.0
+
+# tracking and velocity coexist -- they fold into ONE node, not four inputs
+st.filt_track = 1.0
+st.filt_vel = 500
+st.note_on(72, velocity=127)
+got = st.voices[72][0].filter.frequency.value
+ck(abs(got - 2500.0) < 0.01,
+   "tracking + velocity must both land: want 2500, got %r" % got)
+st.note_off(72)
+st.filt_vel = 0
+
+# patch round-trip: the silent-save trap
+ck("filt_track" in Patch().to_dict(), "filt_track must be a Patch field")
+ck("filt_track" in st._PARAMS, "filt_track must be in the _PARAMS whitelist")
+ck(Patch.from_json('{"name":"old"}').filt_track == 0.0,
+   "a legacy patch must default filt_track to 0 (off)")
+pt = Patch(filt_track=0.25)
+st2 = SubtractiveSynth(sio, pt)
+ck(st2.filt_track == 0.25, "filt_track must load through _recompile")
+st2.filt_track = 0.75
+ck(pt.filt_track == 0.25, "a knob turn must NOT reach the patch")
+st2.save_patch()
+ck(pt.filt_track == 0.75, "save_patch() must commit filt_track")
+
 print()
 if fails:
     print("FAILURES (%d):" % len(fails))

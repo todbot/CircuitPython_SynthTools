@@ -81,7 +81,7 @@ class Synth:
                "penv_amount", "penv_time", "penv_out_amount", "penv_out_time",
                "filt_lfo_rate", "filt_lfo_amount",
                "fenv_amount", "fenv_attack", "fenv_release", "fenv_curve",
-               "filt_vel", "fenv_vel", "glide_time")
+               "filt_vel", "fenv_vel", "filt_track", "glide_time")
     # fmt: on
 
     #: One voice at a time: a note-on steals whatever is sounding, whichever
@@ -110,6 +110,10 @@ class Synth:
     FILT_F_MIN = 20.0
     FILT_F_MAX = 20000.0
 
+    #: MIDI note the keyboard tracking pivots around: at this pitch
+    #: filt_track changes nothing, whatever its value. Middle C.
+    FILT_TRACK_REF = 60
+
     def __init__(self, synthesizer, patch=None):
         self.synthio = synthesizer
         self.voices = {}  # midi_note -> tuple of synthio.Note
@@ -121,6 +125,10 @@ class Synth:
         self._filt_q_blk = scalar_block(1.0)
         self._filt_vel_blk = scalar_block(0.0)
         self._fenv_vel_blk = scalar_block(0.0)
+        self._filt_track_blk = scalar_block(0.0)
+        # Ratios against this cancel the tuning reference entirely, so the
+        # arithmetic below is exact for any 12-TET midi_to_hz.
+        self._track_ref_hz = synthio.midi_to_hz(self.FILT_TRACK_REF)
         # --- the bend graph ------------------------------------------
         #
         #   SHARED:  bend = SUM(vib_lfo, bend_blk)
@@ -256,6 +264,7 @@ class Synth:
         self._filt_q_blk.a = p.filt_q
         self._filt_vel_blk.a = p.filt_vel
         self._fenv_vel_blk.a = p.fenv_vel
+        self._filt_track_blk.a = p.filt_track
         self._filt_lfo.rate = p.filt_lfo_rate
         # via the property: the amount is a half-swing plus a matching
         # offset, and writing .scale alone here would leave a stale offset
@@ -281,6 +290,7 @@ class Synth:
         p.filt_q = self._filt_q_blk.a
         p.filt_vel = self._filt_vel_blk.a
         p.fenv_vel = self._fenv_vel_blk.a
+        p.filt_track = self._filt_track_blk.a
         p.filt_lfo_rate = self._filt_lfo.rate
         p.filt_lfo_amount = self.filt_lfo_amount  # undoes the half-swing
         p.vib_rate = self._vib_lfo.rate
@@ -328,33 +338,73 @@ class Synth:
             return 1.0
         return lerp(1.0, velocity / 127.0, self._fenv_vel_blk)
 
-    def _voice_cutoff(self, velocity):
-        """This voice's node on the cutoff bus: SUM(base, envelope, vel).
+    def _voice_offsets(self, midi_note, velocity):
+        """This voice's velocity and keyboard-tracking offsets, as ONE node.
 
-        Returns the SHARED base unchanged when neither the envelope nor
-        velocity is in play, so the ordinary case allocates nothing at all.
-        Either way filt_f reaches this voice with one write, because the
-        shared base is nested inside.
+        Both are the same idiom: a per-voice constant computed in Python,
+        multiplied by a shared block that stays LIVE inside the graph, so
+        the knob keeps reaching the voice after it has been pressed. They
+        are folded together here so the cutoff SUM keeps its existing three
+        inputs (base, envelope, offsets) instead of needing a fourth --
+        which is also what lets BasslineSynth keep re-aiming one shared node.
+
+        Returns None when neither is in play, so the ordinary patch
+        allocates nothing at all.
         """
-        if self._filt_mode is None:
-            return None
         vel_hz = None
         if self._filt_vel_blk.a:
             # signed: a negative filt_vel closes the filter as you play
             # harder. filt_vel stays live inside the PRODUCT.
             vel_hz = product(self._filt_vel_blk, velocity / 127.0)
-        if self._fenv_cur is None and vel_hz is None:
+        trk_hz = None
+        if self._filt_track_blk.a:
+            # cutoff += filt_f * filt_track * (f/f_ref - 1), so at
+            # filt_track 1.0 the cutoff is exactly filt_f * f/f_ref -- full
+            # tracking, the filter doubling per octave. filt_f is nested
+            # rather than read, so BOTH knobs stay live on a sounding voice.
+            # A ratio of two midi_to_hz values, not 2**(n/12): the tuning
+            # reference cancels, and it avoids ** entirely. That is not just
+            # tidiness -- real synthio's midi_to_hz is NOT the exact formula
+            # the test stub uses (measured on rp2040: midi_to_hz(69) reads
+            # 439.9991, not 440.0), but its octave ratio is exactly
+            # 2.000000000, so a ratio is right on device and in the stubs
+            # while an absolute-Hz formula would drift between them.
+            ratio = synthio.midi_to_hz(midi_note) / self._track_ref_hz - 1.0
+            trk_hz = product(self._filt_f_blk, self._filt_track_blk, ratio)
+        if vel_hz is None:
+            return trk_hz
+        if trk_hz is None:
+            return vel_hz
+        return sum3(vel_hz, trk_hz)
+
+    def _voice_cutoff(self, midi_note, velocity):
+        """This voice's node on the cutoff bus: SUM(base, envelope, offsets).
+
+        Returns the SHARED base unchanged when neither the envelope nor any
+        per-voice offset is in play, so the ordinary case allocates nothing
+        at all. Either way filt_f reaches this voice with one write, because
+        the shared base is nested inside.
+        """
+        if self._filt_mode is None:
+            return None
+        offsets = self._voice_offsets(midi_note, velocity)
+        if self._fenv_cur is None and offsets is None:
             return self._filt_base  # already clamped
         # `is None` rather than truthiness throughout: these are synthio
         # blocks, and whether one is falsy is not ours to assume.
         # Clamped again here, not just on the shared base: a downward
         # fenv_amount (a normal patch) or a negative filt_vel can drive
         # this sum below zero all on its own.
+        # Clamped again here, not just on the shared base: a downward
+        # fenv_amount (a normal patch), a negative filt_vel, or a large
+        # negative filt_track on a high note can each drive this sum below
+        # zero on their own. That is what the clamp is for -- no extra
+        # guarding needed anywhere else.
         return clamp(
             sum3(
                 self._filt_base,
                 self._fenv_cur if self._fenv_cur is not None else 0.0,
-                vel_hz if vel_hz is not None else 0.0,
+                offsets if offsets is not None else 0.0,
             ),
             self.FILT_F_MIN,
             self.FILT_F_MAX,
@@ -404,7 +454,34 @@ class Synth:
         """
         if self.mono:
             # one voice: steal whatever is sounding, whichever note it is
+            secs = self._glide_time if glide is None else glide
+            stolen = [n for notes in self.voices.values() for n in notes] if secs else ()
             self.all_notes_off()
+            # Freeze the stolen notes' pitch BEFORE aiming the glide.
+            #
+            # They are released but still audible, and they share the bend
+            # graph _aim_glide is about to point at the NEW note's starting
+            # pitch -- which is offset by the interval being glided. So the
+            # old tail gets yanked there too: stepping 43 -> 46 with a 0.35s
+            # glide dropped the still-sounding 43 to 81.7 Hz, three semitones
+            # BELOW where it had been, before climbing back (measured on
+            # rp2040). With a slow attack on the new note, that tail is the
+            # loudest thing present, so the step sounds like it goes DOWN.
+            #
+            # A real monosynth cannot do this: one oscillator, one envelope,
+            # retriggered -- there is no previous note to drag. The stale
+            # tail is an artifact of using synthio's polyphonic Note model
+            # for a mono voice, so freezing is the faithful behaviour.
+            #
+            # Reassigning Note.bend to a plain float after press works on
+            # CircuitPython (verified). The trade is that a frozen tail no
+            # longer receives vibrato, the pitch wheel or a pitch-envelope
+            # release drift -- acceptable on a fading release, and it only
+            # happens when portamento is actually on: with glide 0 nothing
+            # is collected above and nothing is frozen.
+            for n in stolen:
+                b = n.bend
+                n.bend = getattr(b, "value", b)
             self._aim_glide(midi_note, glide)
         elif midi_note in self.voices:
             self.note_off(midi_note)
@@ -419,7 +496,7 @@ class Synth:
         # every Note of this voice shares one cutoff and one bend graph.
         if self._filt_mode is not None:
             self._fenv_cur = self._fenv.make(self._voice_fenv_gain(velocity))
-        self._cutoff_cur = self._voice_cutoff(velocity)
+        self._cutoff_cur = self._voice_cutoff(midi_note, velocity)
         self._penv_cur = self._penv.make()
         self._bend_cur = self._voice_bend()
         notes = self._make_notes(midi_note, velocity)
@@ -750,6 +827,31 @@ class Synth:
     @filt_vel.setter
     def filt_vel(self, v):
         self._filt_vel_blk.a = v
+
+    @property
+    def filt_track(self):
+        """Keyboard tracking: how much the cutoff follows the played pitch.
+
+        1.0 is full tracking -- the cutoff doubles per octave, so the filter
+        stays at a fixed point in the harmonic series and every note has the
+        same timbre. 0 is off. Negative tracks INVERSELY, closing the filter
+        as you play higher, which is what the Swarmatron's tracking knob does
+        on the other side of centre.
+
+        Pivots at ``FILT_TRACK_REF`` (MIDI 60): that note's cutoff is
+        ``filt_f`` no matter what this is set to.
+
+        One write, and it reaches every sounding voice -- it is nested LIVE
+        inside each voice's tracking node alongside ``filt_f``, so both keep
+        moving a note that is already playing. Only turning it on *from
+        zero* is next-note-on, the same caveat ``filt_vel`` has: at zero no
+        node exists to write into.
+        """
+        return self._filt_track_blk.a
+
+    @filt_track.setter
+    def filt_track(self, v):
+        self._filt_track_blk.a = v
 
     @property
     def fenv_vel(self):

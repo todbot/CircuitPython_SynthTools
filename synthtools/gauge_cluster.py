@@ -5,7 +5,7 @@
 `gauge_cluster`
 ================================================================================
 
-A group of `displayio` objects that display a list of values graphically.
+A group of ``displayio`` objects that display a list of values graphically.
 
 Part of synthtools.
 
@@ -17,7 +17,7 @@ from vectorio import Rectangle
 
 class GaugeCluster:  # (dispalyio.Group) ?
     """
-    GaugeCluster is a group of `displayio` objects that display a list
+    GaugeCluster is a group of ``displayio`` objects that display a list
     of values graphically.
     """
 
@@ -65,12 +65,12 @@ class GaugeCluster:  # (dispalyio.Group) ?
         self.select_lines = select_lines
 
     def set_gauge_val(self, i, v):
-        """Set gauge `i` with value `v`. v ranges from 0-255"""
+        """Set gauge ``i`` with value ``v``. v ranges from 0-255"""
         self.gauge_vals[i] = v  # 0-255
         self.gauges[1 + (i * 2)].height = self.h - 2 - ((v * (self.h - 2)) // 255)
 
     def get_gauge_val(self, i):
-        """Get gauge value of gauge `i`, return value ranges from 0-255"""
+        """Get gauge value of gauge ``i``, return value ranges from 0-255"""
         return self.gauge_vals[i]
 
     def select_line(self, i, show=True):

@@ -28,6 +28,18 @@ Subtractive Synth
 .. automodule:: synthtools.subtractive_synth
     :members:
 
+FM Synth
+========
+
+.. automodule:: synthtools.fm_synth
+    :members:
+
+Swarm Synth
+===========
+
+.. automodule:: synthtools.swarm_synth
+    :members:
+
 Bassline Synth
 ==============
 
@@ -104,4 +116,16 @@ Utils
 =====
 
 .. automodule:: synthtools.utils
+    :members:
+
+Param Scaler
+============
+
+.. automodule:: synthtools.param_scaler
+    :members:
+
+Gauge Cluster
+=============
+
+.. automodule:: synthtools.gauge_cluster
     :members:
