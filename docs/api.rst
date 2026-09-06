@@ -117,3 +117,15 @@ Utils
 
 .. automodule:: synthtools.utils
     :members:
+
+Param Scaler
+============
+
+.. automodule:: synthtools.param_scaler
+    :members:
+
+Gauge Cluster
+=============
+
+.. automodule:: synthtools.gauge_cluster
+    :members:
