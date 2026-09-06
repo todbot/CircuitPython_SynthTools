@@ -104,6 +104,48 @@ ps.reset(val=20, knob_pos=200)
 ps.update(205)
 ck(ps.val < 100, "reset() did not clear the 1:1 lock: val %.2f" % ps.val)
 
+# --- 7. the noise ratchet ------------------------------------------------
+# Regression for a bug seen on real hardware: after a page change the value
+# and the pot are far apart, and the value crawled onto the pot without
+# anyone touching it. The step is scaled by the runway on the side moved
+# toward, so the two directions are wildly asymmetric and symmetric ADC
+# noise becomes a ratchet, not a random walk.
+_seed = [99]
+
+
+def rnd():
+    """Deterministic LCG -- `random` is not guaranteed on a bare port."""
+    _seed[0] = (1103515245 * _seed[0] + 12345) % 2147483648
+    return _seed[0] / 2147483648.0
+
+
+for noise in (0.25, 0.5, 0.9):
+    ps = ParamScaler(10, 200)  # value low, pot high, nobody turning it
+    for _ in range(400):
+        ps.update(200 + (rnd() * 2 - 1) * noise)
+    ck(
+        abs(ps.val - 10) < 0.001,
+        "noise of +/-%.2f counts moved an untouched value 10 -> %.2f" % (noise, ps.val),
+    )
+
+# the asymmetry itself is real and expected -- it is why the deadband exists
+up = ParamScaler(10, 200)
+up.update(203)  # clears the deadband
+down = ParamScaler(10, 200)
+down.update(197)
+ck(
+    (up.val - 10) > 8 * abs(down.val - 10),
+    "expected a strongly asymmetric step; got %+.3f up vs %+.3f down"
+    % (up.val - 10, down.val - 10),
+)
+
+# 8. ...but a real turn, even a slow one, must still register
+ps = ParamScaler(10, 200)
+before = ps.val
+for i in range(1, 61):  # 60 steps of 0.5, every one under the deadband
+    ps.update(200 + i * 0.5)
+ck(ps.val > before + 1, "sub-deadband turning vanished: %.2f -> %.2f" % (before, ps.val))
+
 if fails:
     print("FAIL (%d)" % len(fails))
     for f in fails:

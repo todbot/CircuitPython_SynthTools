@@ -52,8 +52,24 @@ from synth_setup import synth as engine
 from synthtools import ParamScaler, Patch, SubtractiveSynth
 
 # ParamScaler works in 0-255, the resolution a knob is really worth; the
-# pots read 0-65535, and 65535/255 is 257.
-ADC_TO_255 = 1 / 257
+# pots read 0-65535, and 65535/256 is 255.
+ADC_TO_255 = 1 / 256
+
+# A raw AnalogIn never sits still, and ParamScaler is driven by DELTAS, so
+# that noise is not harmless: its step is scaled by the runway on the side
+# the knob moved toward, which makes the two directions asymmetric and turns
+# symmetric noise into a RATCHET that walks the value onto the pot. The
+# scaler's own deadband stops it, but only if the noise reaching it is
+# smaller than the deadband -- so filter here as well. This is the same
+# integer-domain EMA pico_test_synth's Hardware.read_pots() uses: it costs
+# no float work and its lag is invisible at human knob speeds.
+#
+# 3, not 2. Measured against the scaler's 1-count deadband: an eighth-weight
+# EMA holds an untouched value perfectly still through +/-2 counts of raw
+# ADC noise, where a quarter-weight one starts leaking at +/-2. Realistic
+# rp2040 noise is well under that (a 12-bit ADC at +/-5 LSB is +/-0.3
+# counts of 255), so this is margin, not a tight fit.
+KNOB_SHIFT = 3  # new reading gets 1/8 weight
 
 # name, min, max, format, the SubtractiveSynth attribute it drives
 # fmt: off
@@ -80,9 +96,15 @@ synth = SubtractiveSynth(engine, patch)
 mixer.voice[0].level = 0.6
 
 
+_knob_filt = [knobA.value, knobB.value]
+
+
 def read_knobs():
-    """Both pots in ParamScaler's units."""
-    return (knobA.value * ADC_TO_255, knobB.value * ADC_TO_255)
+    """Both pots in ParamScaler's units, low-pass filtered."""
+    for i, knob in enumerate((knobA, knobB)):
+        # integer EMA on the raw 0-65535 reading; one multiply at the end
+        _knob_filt[i] += (knob.value - _knob_filt[i]) >> KNOB_SHIFT
+    return (_knob_filt[0] * ADC_TO_255, _knob_filt[1] * ADC_TO_255)
 
 
 def to_param(i, scaled):
