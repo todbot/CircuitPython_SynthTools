@@ -49,8 +49,7 @@ import time
 from synth_setup import keys, knobA, knobB, mixer
 from synth_setup import synth as engine
 
-from synthtools import Patch, SubtractiveSynth
-from synthtools.ui import ParamScaler
+from synthtools import ParamScaler, Patch, SubtractiveSynth
 
 # ParamScaler works in 0-255, the resolution a knob is really worth; the
 # pots read 0-65535, and 65535/255 is 257.

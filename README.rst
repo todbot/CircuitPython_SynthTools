@@ -134,9 +134,9 @@ What's Included
   sequencers with on/off callbacks
 * ``Param`` / ``ParamSet`` -- knob-pickup and scaling for UIs with fewer
   knobs than parameters
-* ``synthtools.ui`` -- front-panel helpers: ``ParamScaler`` for knob
-  takeover on a single control, and ``GaugeCluster`` for a bar-graph
-  display of a parameter page.
+* ``ParamScaler`` -- proportional ("scale") knob takeover for a single
+  control, when you are not using ``ParamSet``
+* ``GaugeCluster`` -- a bar-graph display of a parameter page
 * ``Glider`` -- a standalone pitch-slide block for hand-built
   ``synthio.Note`` graphs (the engines above have their own portamento,
   via ``mono`` + ``glide_time``)

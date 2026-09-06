@@ -7,7 +7,7 @@ import time
 import board
 import displayio
 
-from synthtools.ui import GaugeCluster
+from synthtools import GaugeCluster
 
 display = board.DISPLAY  # get display objet, assumes built-in display
 main_group = displayio.Group()

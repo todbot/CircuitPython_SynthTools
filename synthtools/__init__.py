@@ -56,6 +56,8 @@ _LAZY = {
     "tracking_filter": "audio_fx",
     "BasslineSynth": "bassline_synth",
     "FMSynth": "fm_synth",
+    "GaugeCluster": "gauge_cluster",
+    "ParamScaler": "param_scaler",
     "Patch": "patch",
     "load_patches": "patch",
     "save_patches": "patch",

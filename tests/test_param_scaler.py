@@ -17,7 +17,7 @@ this runs on a bare interpreter with no stubs.
 import sys
 
 _D = __file__.rsplit("/", 1)[0] if "/" in __file__ else "."
-sys.path.insert(0, _D + "/../synthtools/ui")  # ui/ has no __init__.py
+sys.path.insert(0, _D + "/../synthtools")  # direct: skips synthtools/__init__
 
 from param_scaler import ParamScaler  # noqa: E402
 

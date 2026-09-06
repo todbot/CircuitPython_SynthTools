@@ -27,8 +27,8 @@ extensions = [
 # optional at runtime (synthtools/__init__.py already guards it with
 # try/except ImportError) but still needs mocking here since the docs build
 # has no real one installed either.
-# displayio/vectorio come with synthtools.ui.gauge_cluster; micropython
-# (for const) with ui.param_scaler. None ships on desktop CPython.
+# displayio/vectorio come with synthtools.gauge_cluster; micropython (for
+# const) with synthtools.param_scaler. None ships on desktop CPython.
 autodoc_mock_imports = [
     "synthio",
     "ulab",
