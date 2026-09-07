@@ -4,7 +4,7 @@
 filter stages are handed a TUPLE of biquads. No DSP.
 
 Kept out of tests/stubs/ on purpose, so every other test still runs with
-audiofilters absent -- which is the path most CircuitPython builds take.
+audiofilters absent, which is the path most CircuitPython builds take.
 """
 
 

@@ -22,7 +22,7 @@ extensions = [
 ]
 
 # synthtools/__init__.py now imports the engine (synth.py etc.), which pulls
-# in synthio and ulab at import time -- neither exists off-device, so autodoc
+# in synthio and ulab at import time: neither exists off-device, so autodoc
 # needs mocks or it fails to import the package at all. adafruit_wave is
 # optional at runtime (synthtools/__init__.py already guards it with
 # try/except ImportError) but still needs mocking here since the docs build

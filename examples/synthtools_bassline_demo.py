@@ -25,7 +25,7 @@ from synthtools import BasslineSynth, Patch
 # --- the patch ----------------------------------------------------------
 # The classic squelch is a big downward sweep from a bright starting point.
 # envmod is a FRACTION of filt_f, not a number of Hz, so the sweep tracks
-# the cutoff knob -- 0.75 of 1200 Hz means the filter falls to 300 Hz, two
+# the cutoff knob: 0.75 of 1200 Hz means the filter falls to 300 Hz, two
 # octaves. Judge envmod in OCTAVES at the cutoff it will actually sit at,
 # never in Hz: 0.2 of 1200 is only a third of an octave and you will not
 # hear it.
@@ -42,7 +42,7 @@ patch = Patch(
     # fenv_attack is the filter FALL time, and it must be shorter than the
     # gate (here 0.9 * a 115ms step = 104ms) or the sweep is cut off
     # partway: at 0.28s it only got 23% of the way down, so envmod=0.75
-    # moved 0.74 octaves instead of 2.0, and envmod=0.2 moved 0.16 -- i.e.
+    # moved 0.74 octaves instead of 2.0, and envmod=0.2 moved 0.16; i.e.
     # nothing. At 0.09s the sweep completes inside the note.
     #
     # The amp decay must be LONGER than that, so the note is still loud
@@ -67,7 +67,7 @@ patch = Patch(
     # is 12 dB/octave; one extra stage makes 24, where the squelch really
     # lives. The stage tracks synth.filter's cutoff AND resonance on its
     # own, so it follows the sweep and the accent with nothing to keep in
-    # sync by hand -- see fx_filter_stages in bassline_synth.py.
+    # sync by hand: see fx_filter_stages in bassline_synth.py.
     fx_filter_stages=1,
 )
 
@@ -77,7 +77,7 @@ try:
     mixer.voice[0].play(synth.output)  # replaces synth_setup's direct hookup
     print("filter: 24 dB/octave (1 extra stage)")
 except ImportError:
-    print("no audiofilters in this build -- 12 dB/octave, voice filter only")
+    print("no audiofilters in this build; 12 dB/octave, voice filter only")
     mixer.voice[0].play(synth.synthio)
 
 # --- the pattern --------------------------------------------------------
@@ -111,30 +111,30 @@ GATE = 0.9  # fraction of a step a note is held for
 # Each entry is (label, function), applied for BARS_PER_CHANGE bars each.
 BARS_PER_CHANGE = 2
 CHANGES = (
-    ("filt_f 1200 -- the resting cutoff", lambda: setattr(synth, "filt_f", 1200)),
-    ("filt_f 500 -- darker, and the sweep shrinks with it", lambda: setattr(synth, "filt_f", 500)),
-    ("filt_f 2500 -- brighter, and the sweep grows", lambda: setattr(synth, "filt_f", 2500)),
+    ("filt_f 1200, the resting cutoff", lambda: setattr(synth, "filt_f", 1200)),
+    ("filt_f 500, darker, and the sweep shrinks with it", lambda: setattr(synth, "filt_f", 500)),
+    ("filt_f 2500, brighter, and the sweep grows", lambda: setattr(synth, "filt_f", 2500)),
     ("filt_f 1200 again", lambda: setattr(synth, "filt_f", 1200)),
-    ("envmod 0.2 -- barely any sweep", lambda: setattr(synth, "envmod", 0.2)),
-    ("envmod 1.0 -- sweeps all the way shut", lambda: setattr(synth, "envmod", 1.0)),
+    ("envmod 0.2, barely any sweep", lambda: setattr(synth, "envmod", 0.2)),
+    ("envmod 1.0, sweeps all the way shut", lambda: setattr(synth, "envmod", 1.0)),
     ("envmod 0.75", lambda: setattr(synth, "envmod", 0.75)),
-    ("filt_q 3.6 -- squelch", lambda: setattr(synth, "filt_q", 3.6)),
-    ("decay 0.03 -- sweep snaps shut, almost a click", lambda: setattr(synth, "decay", 0.03)),
+    ("filt_q 3.6, squelch", lambda: setattr(synth, "filt_q", 3.6)),
+    ("decay 0.03, sweep snaps shut, almost a click", lambda: setattr(synth, "decay", 0.03)),
     (
-        "decay 0.30 -- longer than the gate, so it never finishes",
+        "decay 0.30, longer than the gate, so it never finishes",
         lambda: setattr(synth, "decay", 0.30),
     ),
     ("decay 0.09", lambda: setattr(synth, "decay", 0.09)),
-    ("accent 0.0 -- accented steps stop standing out", lambda: setattr(synth, "accent", 0.0)),
-    ("accent 1.0 -- and now they really do", lambda: setattr(synth, "accent", 1.0)),
+    ("accent 0.0, accented steps stop standing out", lambda: setattr(synth, "accent", 0.0)),
+    ("accent 1.0, and now they really do", lambda: setattr(synth, "accent", 1.0)),
     ("accent 0.6", lambda: setattr(synth, "accent", 0.6)),
     (
-        "slide_time 0.005 -- slides become almost instant",
+        "slide_time 0.005, slides become almost instant",
         lambda: setattr(synth, "slide_time", 0.005),
     ),
-    ("slide_time 0.2 -- long, lazy slides", lambda: setattr(synth, "slide_time", 0.2)),
+    ("slide_time 0.2, long, lazy slides", lambda: setattr(synth, "slide_time", 0.2)),
     ("slide_time 0.09", lambda: setattr(synth, "slide_time", 0.09)),
-    ('wave "SQU" -- the other 303 switch position', lambda: setattr(synth, "wave", "SQU")),
+    ('wave "SQU", the other 303 switch position', lambda: setattr(synth, "wave", "SQU")),
     ('wave "SAW"', lambda: setattr(synth, "wave", "SAW")),
 )
 

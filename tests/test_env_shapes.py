@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 """Numeric checks on the AHR envelope shape in synthtools/waves.py.
 
-Runs the REAL fill_env_rise -- not a copy of it -- against whichever ulab
+Runs the REAL fill_env_rise (not a copy of it) against whichever ulab
 backend is available (real numpy under CPython, the pure fallback under
 MicroPython).
 
@@ -15,7 +15,7 @@ There is only one shape, and it is only a rise:
 See synthtools/ahr_envelope.py.
 
 Because the release is `V * (1 - s(t))`, it INVERTS whatever curvature the
-buffer has -- so the buffer holds 1-(1-t)^curve, and the release comes out
+buffer has, so the buffer holds 1-(1-t)^curve, and the release comes out
 as V*(1-t)^curve, a conventional quick-drop-then-tail decay. Several checks
 below assert the "wrong" direction on purpose for that reason.
 
@@ -43,7 +43,7 @@ def ck(cond, msg):
 
 
 def vals(a):
-    """List of plain ints -- works for numpy arrays and the pure fallback."""
+    """List of plain ints; works for numpy arrays and the pure fallback."""
     return [int(v) for v in a]
 
 
@@ -68,7 +68,7 @@ b = env_buffer()
 fill_env_rise(b, 1)
 v = vals(b)
 ck(all(v[i] < v[i + 1] for i in range(len(v) - 1)),
-   "a linear rise must be STRICTLY increasing -- any flat run means a "
+   "a linear rise must be STRICTLY increasing: any flat run means a "
    "plateau has crept back into the buffer")
 
 # --- curve=1 must stay bit-identical to a plain linear ramp --------------
@@ -84,7 +84,7 @@ for i, want in GOLDEN_LINEAR.items():
     ck(v[i] == want,
        "linear index %d: expected %d, got %d" % (i, want, v[i]))
 
-# The buffer holds 1-(1-t)^curve, NOT t^curve -- see fill_env_rise. So a
+# The buffer holds 1-(1-t)^curve, NOT t^curve; see fill_env_rise. So a
 # higher curve rises FASTER off the mark, not slower. That is chosen for what
 # it does to the release, which reruns this shape as V*(1-s(t)) and therefore
 # inverts it into V*(1-t)^curve, a conventional decay.
@@ -118,7 +118,7 @@ for curve, want_half in ((1, 0.5), (2, 0.25), (3, 0.125)):
        "curve=%s: release should be ~%.3f of its start by halfway, got %.3f"
        % (curve, want_half, half))
     ck(curve == 1 or half < 0.5,
-       "curve=%s: a decay must be past half by halfway -- %.3f means the "
+       "curve=%s: a decay must be past half by halfway; %.3f means the "
        "envelope hangs at the top and then plunges" % (curve, half))
 
 # --- steeper curves nest, and the endpoint never drifts ------------------

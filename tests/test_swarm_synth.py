@@ -10,14 +10,14 @@ SubtractiveSynth, whose `detune` setter has to loop over live voices.
 
 The three checks that would ship as real bugs if dropped:
 
-  1. the shared fan blocks are rooted in synthesizer.blocks -- unrooted,
+  1. the shared fan blocks are rooted in synthesizer.blocks: unrooted,
      they are only reachable through a sounding Note, so the FIRST note-on
      of a fresh synth reads every fan as 0.0 and the swarm sounds in unison
      for one block before snapping apart (the same failure synth.py
      documents measuring as a 0.0 Hz first-note cutoff);
   2. the per-Note bend SUM is built even at swarm_spread 0, or sweeping the
-     spread up from nothing under a held drone -- the instrument's defining
-     gesture -- would be next-note-on only;
+     spread up from nothing under a held drone (the instrument's defining
+     gesture) would be next-note-on only;
   3. swarm_count 1 does not divide by zero in the fan coefficient.
 
 No DSP: the stubs do not render audio, so this checks identity, wiring and
@@ -51,7 +51,7 @@ def close(a, b, eps=1e-9):
 # --- swarm_* are NOT Patch fields: they ride in __dict__ via getattr ------
 p = Patch()
 ck(not hasattr(p, "swarm_count"),
-   "swarm_* must stay OUT of Patch -- they are style-specific, read with getattr")
+   "swarm_* must stay OUT of Patch, they are style-specific, read with getattr")
 rt = Patch.from_json(Patch(swarm_count=4, swarm_spread=0.05, swarm_drift=0.01).to_json())
 ck(rt.swarm_count == 4 and close(rt.swarm_spread, 0.05) and close(rt.swarm_drift, 0.01),
    "swarm_* must round-trip through JSON as unknown-kwarg extras")
@@ -67,12 +67,12 @@ for i, f in enumerate(s._fan):
     ck(f.b is s._drift_lfos[i], "fan[%d] must sum in its own drift LFO" % i)
     ck(f.b.scale is s._drift_blk, "drift LFO %d must take the shared drift block as its scale" % i)
 # A drift LFO ticks because it is NESTED inside a rooted fan, not because it
-# is rooted itself -- measured on rp2040 (10.3.0-alpha.3): rooted,
+# is rooted itself, measured on rp2040 (10.3.0-alpha.3): rooted,
 # nested-only and rooted+nested LFOs all advance; only a genuinely orphaned
 # one freezes. So what must hold is REACHABILITY from a rooted block, and
 # the drift LFOs must NOT be separately rooted (that is 8 wasted evaluations
-# a block). The stubs cannot see ticking at all -- nothing advances
-# LFO.phase there -- so this is asserted structurally.
+# a block). The stubs cannot see ticking at all (nothing advances
+# LFO.phase there) so this is asserted structurally.
 for i, lfo in enumerate(s._drift_lfos):
     ck(lfo not in sio.blocks,
        "drift LFO %d must NOT be separately rooted; nesting in the fan is enough" % i)
@@ -108,12 +108,12 @@ for i, n in enumerate(notes):
     ck(n.bend.a is s._bend, "...nesting the shared bend graph, so vibrato/pitchbend still reach it")
     ck(n.bend.b is s._fan[i], "...and summing in THIS oscillator's fan block")
     ck(n.frequency == notes[0].frequency,
-       "every oscillator must sit on the SAME frequency -- the spread is bend, not frequency")
+       "every oscillator must sit on the SAME frequency, the spread is bend, not frequency")
 # each oscillator gets its own random phase slice
 ck(any(notes[i].waveform is not notes[0].waveform for i in range(1, 8)),
    "each oscillator needs its own random-phase waveform slice")
 
-# --- amplitude: the worst case (all peaks aligned) still tops out at 1.0 --
+# --- amplitude: the worst case (all peaks aligned) still tops out at 1.0,
 ck(close(sum(n.amplitude for n in notes), 1.0),
    "amplitudes must sum to velocity/127, got %r" % sum(n.amplitude for n in notes))
 
@@ -123,7 +123,7 @@ s2.note_on(60)
 held = s2.voices[60]
 before = [n.bend.value for n in held]
 ck(max(before) - min(before) < 1e-9, "at spread 0 every oscillator must be in unison")
-s2.swarm_spread = 0.02  # ONE write -- no per-voice loop anywhere
+s2.swarm_spread = 0.02  # ONE write, no per-voice loop anywhere
 after = [n.bend.value for n in held]
 ck(close(min(after), -0.02) and close(max(after), 0.02),
    "one write must fan the ALREADY SOUNDING notes to +/-spread, got %r" % (after,))

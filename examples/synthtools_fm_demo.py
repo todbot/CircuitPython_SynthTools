@@ -8,7 +8,7 @@ from synth_setup import synth as engine
 from synthtools import FMSynth, Patch
 
 # --- a classic FM patch: a bright, bell-ish DX-style tone ------------------
-# fm_ratio is modulator cycles per carrier cycle -- MUST be an integer, or
+# fm_ratio is modulator cycles per carrier cycle; MUST be an integer, or
 # the baked waveform buzzes at its loop point (see fm_synth.py). fm_index is
 # PM depth in radians: 0 = plain sine, 1-3 = classic FM, 5+ = harsh.
 # fmt: off
@@ -47,7 +47,7 @@ while True:
     elif segment < 16:
         # live FM: each write rewrites the shared PM table in place, reaching
         # every voice using it, O(1) in polyphony. fm_ratio must stay an
-        # integer -- non-integer ratios buzz at the waveform's loop point.
+        # integer: non-integer ratios buzz at the waveform's loop point.
         # fm_index was left at 0 by the break above, so the toggle below
         # also turns FM back on again at segment 0.
         if i % 16 == 0:
@@ -55,7 +55,7 @@ while True:
         if i % 8 == 0:
             synth.fm_index = 2.0 if synth.fm_index == 0.5 else 0.5
 
-    # `wave` is only what's actually sounding while FM is off -- once FM
+    # `wave` is only what's actually sounding while FM is off; once FM
     # turns back on, `synth.wave` still reads back the last break's name
     # even though it's no longer in use, so don't print it as if it were.
     if synth.fm_index:

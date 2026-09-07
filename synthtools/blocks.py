@@ -9,11 +9,11 @@
 # These exist so graph-building code reads as arithmetic instead of
 # synthio.Math(synthio.MathOperation.X, ...) boilerplate, and so the
 # operation names appear in exactly one place. Every argument may be a
-# number OR another block -- that is the whole point.
+# number OR another block, which is the whole point.
 #
 # Plain functions rather than synthio's callable-MathOperation shorthand
-# (MathOperation.SUM(a, b, c)): not worth depending on in a library that
-# has to run on whatever CircuitPython build is on the board.
+# (MathOperation.SUM(a, b, c)): not worth depending on in a library that has
+# to run on whatever CircuitPython build is on the board.
 
 import synthio
 
@@ -57,6 +57,6 @@ def constrained_lerp(a, b, t):
 
 
 def clamp(x, lo, hi):
-    """x limited to [lo, hi] -- the middle of three values IS a clamp, so
+    """x limited to [lo, hi]; the middle of three values IS a clamp, so
     this is one block rather than a MIN of a MAX."""
     return synthio.Math(_OP.MID, x, lo, hi)

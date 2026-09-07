@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
 # SPDX-License-Identifier: MIT
 #
-# wavetable.py - reads Serum-style single-cycle WAV wavetables (16-bit mono,
+# wavetable.py -- reads Serum-style single-cycle WAV wavetables (16-bit mono,
 # waves of `size` samples back to back) into a reusable waveform buffer.
 # Requires the adafruit_wave library.
 #
@@ -50,13 +50,12 @@ class Wavetable:
             return
         wave_b = self._read_wave(i + 1)
 
-        # Convex combination, evaluated in float. Do NOT write this as the
-        # usual  wave_a + frac * (wave_b - wave_a)  -- that subtraction is
-        # performed in int16 and wraps whenever the two samples straddle
-        # zero at high amplitude (32000 - -32000 = 64000 -> +1536), which
-        # then pushes the result past 32767 and raises
-        #   OverflowError: value must fit in 2 byte(s)
-        # on the store back into the int16 buffer. Multiplying by the float
-        # weights first promotes to float, and since frac is in [0,1] the
-        # result is bounded by the two inputs, so it always fits.
+        # Convex combination, evaluated in float. Do NOT write it the usual
+        # way, wave_a + frac * (wave_b - wave_a): that subtraction happens in
+        # int16 and wraps whenever the two samples straddle zero at high
+        # amplitude (32000 - -32000 = 64000 -> +1536), pushing the result
+        # past 32767 and raising `OverflowError: value must fit in 2 byte(s)`
+        # on the store back. Multiplying by the float weights first promotes
+        # to float, and with frac in [0,1] the result is bounded by the two
+        # inputs, so it always fits.
         self.waveform[:] = np.array(wave_a * (1.0 - frac) + wave_b * frac, dtype=np.int16)

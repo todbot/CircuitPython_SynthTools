@@ -40,7 +40,7 @@ for op, a, b, c, want, name in (
 print("--- midi_to_hz: the STUB is not bit-identical, ratios are ----------")
 # synth.py's keyboard tracking (filt_track) uses a RATIO of two midi_to_hz
 # values rather than 2**(n/12), because real synthio and tests/stubs/synthio.py
-# disagree in absolute Hz -- but not on ratios. Pin both facts.
+# disagree in absolute Hz, but not on ratios. Pin both facts.
 print("      device midi_to_hz(69) = %.6f (the stub says exactly 440.0)"
       % synthio.midi_to_hz(69))
 for lo, hi, want, name in ((60, 72, 2.0, "octave"), (60, 84, 4.0, "two octaves")):
@@ -60,7 +60,7 @@ try:
     settle(0.2)
     print("      NEGATIVE Biquad.frequency was ACCEPTED and did not crash")
     print("      -> the MID clamp is defensive only; audio quality unknown")
-except Exception as e:      # noqa: BLE001 -- this is the whole point
+except Exception as e:      # noqa: BLE001; this is the whole point
     print("      NEGATIVE Biquad.frequency raised %s: %s" % (type(e).__name__, e))
     print("      -> the MID clamp is MANDATORY, keep it")
 
@@ -137,7 +137,7 @@ print("      cutoff swung %.1f .. %.1f Hz  (width %.1f, want ~%d)"
       % (lo, hi, swing, AMT))
 # bracket the WIDTH, not just "it moved": a > 200 check would also pass a
 # half-wired LFO. The width is ~1*amount, not 2*amount, because the LFO is
-# ADDITIVE -- filt_f is the floor and it opens upward. If this reads ~2*AMT
+# ADDITIVE: filt_f is the floor and it opens upward. If this reads ~2*AMT
 # the LFO's offset has been lost and the swing has recentred on filt_f.
 # Discrete sampling can only under-read the extrema, hence the slack.
 ck(0.75 * AMT < swing < 1.25 * AMT,
@@ -208,7 +208,7 @@ frac = half / v_start
 print("      envelope %.1f -> %.1f at halfway (%.2f of its height)"
       % (v_start, half, frac))
 ck(frac < 0.45,
-   "a decay must be well past half by halfway, got %.2f -- above 0.5 means "
+   "a decay must be well past half by halfway, got %.2f: above 0.5 means "
    "the envelope hangs at the top and then plunges" % frac)
 ck(0.10 < frac < 0.42, "want ~0.25 for curve=2, got %.2f" % frac)
 settle(0.8)
@@ -326,7 +326,7 @@ ck(pat.filt_f == 2500 and pat.amp_env[0] == 0.4 and pat.wave == "SQU",
    "save_patch() must commit everything, subclass params included")
 
 print("--- vib_delay: does the fade tick nested inside LFO.scale? -------")
-# _vib_fade is NOT rooted in synth.blocks -- it is nested in _vib_lfo.scale,
+# _vib_fade is NOT rooted in synth.blocks: it is nested in _vib_lfo.scale,
 # and _vib_lfo IS rooted. Unattached Math blocks were found to freeze, so
 # this checks the nesting really is enough.
 s.load_patch(Patch(filt_type="LPF", filt_f=2000, fenv_amount=0,
@@ -345,7 +345,7 @@ ck(readings[0] < 0.004, "vibrato must start at ~0 depth, got %.4f" % readings[0]
 ck(readings[-1] > 0.016,
    "...and reach vib_depth once the fade completes, got %.4f" % readings[-1])
 ck(all(readings[i] <= readings[i + 1] + 0.001 for i in range(len(readings) - 1)),
-   "the fade must rise monotonically -- if it is flat at 0 the nested ramp "
+   "the fade must rise monotonically; if it is flat at 0 the nested ramp "
    "is not ticking and _vib_fade needs rooting in synth.blocks")
 s.all_notes_off()
 settle(0.3)
@@ -430,7 +430,7 @@ engine.blocks.remove(senv)
 # NOTE the long attack: a falling envelope is already on its way down the
 # instant it exists, so the first reading has to be taken while barely any
 # of it has elapsed. At attack=0.3 a 0.05s settle is a sixth of the fall
-# and reads ~0.83 -- correct behaviour, but useless as a "starts at its
+# and reads ~0.83: correct behaviour, but useless as a "starts at its
 # amount" check. At attack=1.5 the same settle is ~3%.
 fall = AHREnvelope(attack=1.5, release=0.3, amount=1.0,
                    falling=True, release_amount=0.5)

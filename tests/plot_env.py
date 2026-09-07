@@ -6,7 +6,7 @@
     python3 tests/plot_env.py 2            # just curve=2
     micropython tests/plot_env.py
 
-Not a test -- a look at what the envelope actually does. It calls the REAL
+Not a test: a look at what the envelope actually does. It calls the REAL
 synthtools.waves.fill_env_rise and evaluates the REAL block arithmetic that
 AHREnvelope.make() / start_release() set up, so it cannot drift away from
 what the synth plays:
@@ -15,7 +15,7 @@ what the synth plays:
     release   env = V * (1 - s(t))              LERP(V, 0, pos), V = value at note-off
 
 `s` is the shared shape buffer, sampled the way synthio samples an LFO
-waveform. The release re-runs that SAME rising buffer forward -- it does not
+waveform. The release re-runs that SAME rising buffer forward: it does not
 play it backwards, and it is not a second, independently shaped curve. That
 is why the buffer holds 1-(1-t)^curve rather than the more obvious t^curve:
 it is the release that decides, since `V * (1 - s(t))` inverts whatever
@@ -114,7 +114,7 @@ def main():
             print()
         table(buf, "fenv_curve=%d" % curve)
         print("    a decay should be well under 0.50 by halfway; the shape this "
-              "replaced\n    read 0.75 there at curve=2 -- it hung, then plunged.")
+              "replaced\n    read 0.75 there at curve=2; it hung, then plunged.")
 
 
 main()

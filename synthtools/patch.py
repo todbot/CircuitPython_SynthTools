@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
 # SPDX-License-Identifier: MIT
 #
-# patch.py - pure-data patch objects, trivially JSON serializable.
+# patch.py -- pure-data patch objects, trivially JSON serializable.
 # Rule: only JSON-native types live here (str, int, float, bool, list).
 # Never a synthio object, never a ulab array.
 
@@ -27,14 +27,14 @@ class Patch:
         self.vib_rate = 5.0  # Hz
         self.vib_depth = 0.0  # in bend units: 1.0 = one octave, 0.006 ~ 10 cents
         self.vib_delay = 0.0  # seconds for vibrato to fade in (0 = immediate)
-        # Portamento. Only applies while the synth's `mono` is set; a
-        # polyphonic synth ignores it. 0 = jump straight to pitch.
-        # One voice at a time. None means "unspecified -- use whatever the
-        # style defaults to", which is what keeps a BasslineSynth or
-        # SwarmSynth patch written before this field existed from loading
-        # as polyphonic. True/False pin it explicitly.
+        # One voice at a time. None means "unspecified, use whatever the
+        # style defaults to", which keeps a BasslineSynth or SwarmSynth patch
+        # written before this field existed from loading as polyphonic.
+        # True/False pin it explicitly.
         self.mono = None
-        self.glide_time = 0.0  # seconds to slide from the previous note
+        # Portamento, in seconds; 0 jumps straight to pitch. Only applies
+        # while `mono` is set, since a polyphonic synth ignores it.
+        self.glide_time = 0.0
         # Pitch envelope, in the same bend units. Bends INTO the note from
         # penv_amount to true pitch, then on note-off drifts OUT to
         # penv_out_amount. Both amounts default to 0 = off, and a voice with
@@ -56,33 +56,25 @@ class Patch:
         self.fenv_attack = 0.05  # seconds to reach full depth
         self.fenv_release = 0.40  # seconds to fall back to zero
         # Integer exponent on the envelope shape: 1 = linear, 2+ increasingly
-        # curved. The attack rises fast and eases into the peak; the release
-        # drops fast and tails off -- the conventional analog feel. Both come
-        # from one shared buffer holding 1-(1-t)^curve, so they are linked:
-        # see fill_env_rise() in waves.py for why the release decides.
+        # curved, the conventional analog feel. Attack and release come from
+        # ONE shared buffer holding 1-(1-t)^curve, so they are linked; see
+        # fill_env_rise() in waves.py for why the release decides the form.
         self.fenv_curve = 1
-        # 4. Velocity. The units differ on purpose: filt_vel adds to a
-        #    cutoff so it is in Hz, fenv_vel scales a depth so it is a
-        #    0-1 fraction. Both default to "velocity changes nothing".
-        self.filt_vel = 0  # Hz of cutoff at full velocity; negative
-        #                       means hard playing CLOSES the filter
+        # 4. Velocity. Units differ on purpose: filt_vel adds to a cutoff so
+        #    it is Hz, fenv_vel scales a depth so it is a 0-1 fraction.
+        self.filt_vel = 0  # Hz at full velocity; negative CLOSES the filter
         self.fenv_vel = 0.0  # 0 = uniform depth, 1.0 = depth tracks velocity
         # 5. Keyboard tracking: the cutoff follows the played pitch, as a
-        #    FRACTION of full tracking rather than Hz. 1.0 = the cutoff
-        #    doubles per octave (so the filter sits at a constant point in
-        #    the harmonic series), 0 = off, 0.5 = half-tracking, and
-        #    NEGATIVE closes the filter as you play higher -- the Swarmatron
-        #    'T' switch's knob sets amount AND direction the same way.
-        #    Pivots at Synth.FILT_TRACK_REF (MIDI 60), where it does nothing.
+        #    FRACTION of full tracking rather than Hz. 1.0 doubles the cutoff
+        #    per octave, 0 = off, and NEGATIVE closes the filter as you play
+        #    higher. Pivots at Synth.FILT_TRACK_REF (MIDI 60).
         self.filt_track = 0.0
-        # No FM by default: fm_index 0.0 means the plain `wave` oscillator is
-        # used, so a plain Patch costs nothing extra. FM here is a baked
-        # phase-modulation carrier waveform (see fm_synth.py), not a live
-        # audio-rate modulator -- synthio's Math/LFO blocks only update
-        # every 256 samples (172 Hz), far too slow for that.
-        self.fm_ratio = 1  # modulator cycles per carrier cycle; MUST be an
-        #                      integer, or the waveform buzzes at its loop point
-        self.fm_index = 0.0  # PM depth in radians; 0 = off (plain `wave` used)
+        # No FM by default: fm_index 0.0 uses the plain `wave` oscillator, so
+        # a plain Patch costs nothing extra. FM here is a baked
+        # phase-modulation carrier waveform, not a live audio-rate
+        # modulator; see fm_synth.py for why that cannot work.
+        self.fm_ratio = 1  # modulator cycles per carrier cycle; MUST be int
+        self.fm_index = 0.0  # PM depth in radians; 0 = off
         # setattr loop, not self.__dict__.update(kw): CircuitPython's
         # instance __dict__ is a read-only mapping and update() raises
         # TypeError. Reading it (dict(self.__dict__)) is fine.

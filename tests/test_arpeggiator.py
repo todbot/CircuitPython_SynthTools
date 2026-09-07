@@ -1,12 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
 # SPDX-License-Identifier: MIT
-"""Arpeggiator checks -- timing/sequencing logic plus a regression test
+"""Arpeggiator checks; timing/sequencing logic plus a regression test
 for the constructor bug fixed alongside this file: Arpeggiator.__init__
 called `self.set_bpm(120)` with no rate, which overwrote self.rate with
 set_bpm's own default (None) and raised TypeError on every construction.
 
 arpeggiator.py imports only `time` (with a `supervisor.ticks_ms` shim), so
-like test_patch.py this runs on a bare interpreter -- no stubs needed.
+like test_patch.py this runs on a bare interpreter: no stubs needed.
 ticks_ms is monkeypatched to a fake, settable clock so the timing tests are
 exact and instant instead of racing real wall-clock sleeps.
 
@@ -94,7 +94,7 @@ arp3.stop()
 ck(arp3.on is False, "stop() must turn the arpeggiator off")
 ck(stop_events == [None],
    "stop() calls off_func(held_note) unconditionally, even with nothing "
-   "held -- an off_func that doesn't tolerate None will raise here")
+   "held; an off_func that doesn't tolerate None will raise here")
 
 # --- update(): a full pass through a 3-note pattern, gate + octave -----
 
@@ -133,7 +133,7 @@ ck(advance(0) == [("on", 60)], "first update() at start time fires note 0")
 ck(arp4.i == 1, "i must advance past the note just fired")
 ck(arp4.held_note == 60, "held_note must be the note just fired")
 
-# gate is 0.5 * 125ms = 62.5ms -- before that, the note must stay held
+# gate is 0.5 * 125ms = 62.5ms: before that, the note must stay held
 ck(advance(60) == [], "must not release before gate time elapses")
 
 # past the gate but before the next 125ms step: release only

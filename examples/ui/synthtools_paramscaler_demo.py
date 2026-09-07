@@ -17,7 +17,7 @@
 # value is somewhere else entirely. Every solution to this is a trade:
 #
 #   JUMP    apply the pot immediately. The value leaps the instant you
-#           touch it -- fine for a mixer, awful for a filter cutoff.
+#           touch it: fine for a mixer, awful for a filter cutoff.
 #   PICKUP  ignore the pot until it passes the value. Nothing leaps, but
 #           the pot is dead until it crosses, which can be most of a turn
 #           with no feedback at all.
@@ -27,7 +27,7 @@
 #
 # --- what to watch ----------------------------------------------------
 #
-# Set cutoff low with knobA -- low, but not against the stop, or there is
+# Set cutoff low with knobA: low, but not against the stop, or there is
 # nothing left for it to move. Tap the button to page 2, run knobA to the
 # top, tap back to page 1. knobA is now at the top while cutoff is still
 # low: a maximal mismatch. Now turn knobA down. Cutoff starts moving on
@@ -60,7 +60,7 @@ ADC_TO_255 = 1 / 256
 # the knob moved toward, which makes the two directions asymmetric and turns
 # symmetric noise into a RATCHET that walks the value onto the pot. The
 # scaler's own deadband stops it, but only if the noise reaching it is
-# smaller than the deadband -- so filter here as well. This is the same
+# smaller than the deadband, so filter here as well. This is the same
 # integer-domain EMA pico_test_synth's Hardware.read_pots() uses: it costs
 # no float work and its lag is invisible at human knob speeds.
 #
@@ -158,7 +158,7 @@ def show():
     print(line)
 
 
-print("paramscaler demo -- k is the pot, V is the value, * is caught up")
+print("paramscaler demo, k is the pot, V is the value, * is caught up")
 print("tap the button for the next page of two parameters")
 apply_page()
 show()
@@ -184,7 +184,7 @@ while True:
     if ev := keys.events.get():
         if ev.pressed:
             page = (page + 1) % NUM_PAGES
-            # The two scalers coming on screen have stale knob memory --
+            # The two scalers coming on screen have stale knob memory,
             # their pots have been moving for the OTHER page. reset()
             # re-bases each to where its pot is now and drops the 1:1
             # lock, keeping the value. Without this the first update()

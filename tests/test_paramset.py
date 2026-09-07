@@ -5,7 +5,7 @@
 KNOB_PICKUP: a pot does nothing until it passes the value it points at,
 then tracks 1:1.
 
-KNOB_SCALE: every turn moves the value, scaled so the two converge -- the
+KNOB_SCALE: every turn moves the value, scaled so the two converge; the
 same "SCALE" takeover ui/param_scaler.py implements, and carrying the same
 contract: never move against the knob, never move without the knob, and
 land on a rail when the knob is driven onto one.
@@ -103,7 +103,7 @@ for start in (0.0, 17.3, 50.0, 99.9):
         "knob to min left val at %.3f (start %.1f)" % (p.val, start),
     )
 
-# 5. A turning knob is never dead -- the whole point of SCALE over PICKUP.
+# 5. A turning knob is never dead: the whole point of SCALE over PICKUP.
 ps, p = mk(ParamSet.KNOB_SCALE, 95.0)
 ps.update_knobs((0.05, 0.0))
 dead, v = 0, p.val
@@ -121,14 +121,14 @@ ck(0.0 <= p.val <= 100.0, "val left its range: %.3f" % p.val)
 
 # 7. A resting pot must not write. Its ADC jitter is a real movement to a
 #    delta-based mode, and writing an envelope parameter rebuilds a
-#    synthio.Envelope for every sounding note -- so an untouched knob has
+#    synthio.Envelope for every sounding note, so an untouched knob has
 #    to cost nothing.
 JITTER = 0.0013  # measured on a pico_test_synth pot, already filtered
 _seed = [12345]
 
 
 def rnd():
-    """Deterministic LCG -- `random` is not guaranteed on a bare port."""
+    """Deterministic LCG; `random` is not guaranteed on a bare port."""
     _seed[0] = (1103515245 * _seed[0] + 12345) % 2147483648
     return _seed[0] / 2147483648.0
 

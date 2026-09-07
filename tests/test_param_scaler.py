@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
 # SPDX-License-Identifier: MIT
-"""ParamScaler checks -- proportional ("scale") knob takeover.
+"""ParamScaler checks; proportional ("scale") knob takeover.
 
 The contract, from param_scaler.py's own docstring: the value moves
 relative to the knob's change and the runway each has left; it always
@@ -73,7 +73,7 @@ for val in (0, 20, 128, 200, 255):
 
 # --- 3. an end stop brings the value with it ----------------------------
 # "Once the knob reaches its max or min position, the value will move in
-# sync with the knob" -- so from any mismatch, running the knob to a rail
+# sync with the knob", so from any mismatch, running the knob to a rail
 # must land the value on that rail.
 for start in (0, 30, 128, 200, 255):
     ck(
@@ -114,7 +114,7 @@ _seed = [99]
 
 
 def rnd():
-    """Deterministic LCG -- `random` is not guaranteed on a bare port."""
+    """Deterministic LCG, `random` is not guaranteed on a bare port."""
     _seed[0] = (1103515245 * _seed[0] + 12345) % 2147483648
     return _seed[0] / 2147483648.0
 
@@ -128,7 +128,7 @@ for noise in (0.25, 0.5, 0.9):
         "noise of +/-%.2f counts moved an untouched value 10 -> %.2f" % (noise, ps.val),
     )
 
-# the asymmetry itself is real and expected -- it is why the deadband exists
+# the asymmetry itself is real and expected, it is why the deadband exists
 up = ParamScaler(10, 200)
 up.update(203)  # clears the deadband
 down = ParamScaler(10, 200)

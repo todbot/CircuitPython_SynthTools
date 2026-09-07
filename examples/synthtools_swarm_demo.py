@@ -9,8 +9,8 @@
 #
 #     import synthtools_swarm_demo
 #
-# The real instrument has two ribbons -- one for pitch, one for the swarm
-# span -- and "taffy pulling" the two together is what it is for. There are
+# The real instrument has two ribbons (one for pitch, one for the swarm
+# span) and "taffy pulling" the two together is what it is for. There are
 # only two knobs on this breadboard, so phase 2 below plays that gesture
 # automatically; wire knobA to swarm_spread if you have the hardware.
 #
@@ -63,7 +63,7 @@ def sweep(param, start, end, seconds, steps=60):
     """Ramp one live parameter, in Python, over `seconds`.
 
     Every write is ONE write into a shared block that reaches all eight
-    sounding oscillators -- that is the design claim this demo exists to
+    sounding oscillators: that is the design claim this demo exists to
     show. Sweeping SubtractiveSynth's `detune` the same way would loop over
     every live Note on every step.
     """
@@ -79,11 +79,11 @@ while True:
     print("1: unison -> chorus, on a held drone")
     synth.swarm_spread = 0.0
     # glide=0 on every SECTION-OPENING note. mono keeps _last_midi across
-    # silence -- it is never cleared by note_off -- so without this the
+    # silence (it is never cleared by note_off) so without this the
     # first note of a section slides in from the previous section's pitch,
     # audibly: 5 semitones here and again entering section 3. Slides within
     # a section are wanted; slides across a two-second gap are not.
-    # (glide=0 does not SKIP the glide, it runs it in 1ms -- inside one
+    # (glide=0 does not SKIP the glide, it runs it in 1ms: inside one
     # 5.8ms block, so it never renders.)
     synth.note_on(43, velocity=110, glide=0)  # G2
     time.sleep(1.0)
@@ -94,9 +94,9 @@ while True:
 
     # --- 2. taffy pull: span and pitch moving together ------------------
     # Dewanatron's own word for it. The spread opens out to an equidistant
-    # chord spread over octaves while the root walks -- glide_time makes
+    # chord spread over octaves while the root walks: glide_time makes
     # each step a slide rather than a jump, so the whole cluster smears.
-    print("2: taffy pull -- span opening while the root walks")
+    print("2: taffy pull; span opening while the root walks")
     for i, note in enumerate((43, 46, 50, 53, 55, 62)):
         synth.note_on(note, velocity=110)
         sweep("swarm_spread", 0.02 + i * 0.12, 0.02 + (i + 1) * 0.12, 1.6)
@@ -109,7 +109,7 @@ while True:
     # --- 3. drift is what stops a fixed fan sounding like a chorus -----
     # Same spread both times: first with every oscillator frozen at its
     # exact ratio, then wandering. The second one breathes.
-    print("3: drift off, then on -- same spread both times")
+    print("3: drift off, then on; same spread both times")
     synth.swarm_spread = 0.012
     for drift in (0.0, 0.008):
         synth.swarm_drift = drift

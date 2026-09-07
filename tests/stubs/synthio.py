@@ -27,7 +27,7 @@ class MathOperation:
 
 
 class Math:
-    # real synthio defaults c to 1.0, not 0.0 -- PRODUCT(a, b) has to be a*b
+    # real synthio defaults c to 1.0, not 0.0; PRODUCT(a, b) has to be a*b
     def __init__(self, operation, a=0.0, b=0.0, c=1.0):
         self.operation = operation
         self.a, self.b, self.c = a, b, c
@@ -67,7 +67,7 @@ class LFO:
 
         On CircuitPython 10.3.0-alpha.4 (rp2350), `lfo.waveform = arr` raises
         AttributeError. An earlier engine design swapped buffers here to do
-        its release and crashed at every note-off on hardware -- while an
+        its release and crashed at every note-off on hardware, while an
         earlier version of this stub, which allowed the assignment, passed
         happily. A stub that is more permissive than the platform is worse
         than no stub, so this one refuses too.

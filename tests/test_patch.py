@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
 # SPDX-License-Identifier: MIT
-"""Patch round-trip checks -- the one module that needs no stubs at all.
+"""Patch round-trip checks; the one module that needs no stubs at all.
 
 patch.py imports only `json`, so this runs on a bare interpreter and is
 the cheapest place to catch MicroPython idiom bugs
@@ -36,7 +36,7 @@ ck(isinstance(p.amp_env, list),
 p.amp_env[0] = 0.5
 ck(p.amp_env[0] == 0.5, "amp_env must support in-place stage assignment")
 
-# unknown kwargs must land in __dict__ and survive -- this is the setattr
+# unknown kwargs must land in __dict__ and survive, this is the setattr
 # loop standing in for self.__dict__.update(kw), which raises TypeError on
 # CircuitPython because the instance __dict__ is a read-only mapping
 p2 = Patch(wave_file="/wt.wav", wave_pos=3.5, synth_type="wavetable")
@@ -56,7 +56,7 @@ ck(r3.wave_pos_max == 5.5 and r3.wave_lfo_rate == 1.25
 legacy2 = Patch.from_json('{"name":"old","filt_f":900}')
 ck(not hasattr(legacy2, "wave_pos_max"),
    "a patch saved before the wave-position LFO existed must simply lack "
-   "the field -- WavetableSynth._recompile()'s getattr(p, 'wave_pos_max', "
+   "the field, WavetableSynth._recompile()'s getattr(p, 'wave_pos_max', "
    "wave_pos) supplies the off default, same as wave_pos/wave_file today")
 
 ck(p.filt_vel == 0, "default filt_vel should be 0 (velocity changes nothing)")

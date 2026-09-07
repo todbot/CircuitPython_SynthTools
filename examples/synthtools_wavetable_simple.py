@@ -22,7 +22,7 @@ wt.wave_pos_max = wt.num_waves - 1  # sweep across the whole wavetable
 wt.note_on(48)
 
 while True:
-    # the wave-position LFO lives outside the synthio block graph -- it has
+    # the wave-position LFO lives outside the synthio block graph; it has
     # to be pushed into the wavetable buffer by hand, as often as possible
     wt.update()
     wt.wave_lfo_rate = (knobA.value / 65535) * 0.25

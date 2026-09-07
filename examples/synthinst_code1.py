@@ -45,7 +45,7 @@ while True:
     i += 1
 
     # live filter sweep: one write into a shared block, O(1) in polyphony.
-    # deadband it -- a jittery pot otherwise writes on every single frame.
+    # deadband it: a jittery pot otherwise writes on every single frame.
     sweep = (sweep + 7) % 100
     new_f = 400 + 30 * sweep
     if abs(new_f - synth.filt_f) > 5:
@@ -62,7 +62,7 @@ while True:
     #   synth.filt_vel = -1500         # hard playing CLOSES the filter
     #   synth.pitch_bend(0.05)
 
-    # NOTE none of the above touched `patch` -- knob turns are live state
+    # NOTE none of the above touched `patch`; knob turns are live state
     # only. To keep them, snapshot first:
     #   synth.save_patch().save("/my_patch.json")
     # and reloading the old patch is therefore a revert:

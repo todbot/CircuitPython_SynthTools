@@ -4,7 +4,7 @@
 
 Proves the design in fm_synth.py holds: FM here is a baked phase-modulation
 CARRIER TABLE (sin(theta + index*sin(ratio*theta))), not a live audio-rate
-modulator on note.bend -- synthio's Math/LFO blocks only update once every
+modulator on note.bend; synthio's Math/LFO blocks only update once every
 256 samples (172 Hz), which aliases any modulator above ~86 Hz, so a
 bend-based design cannot render real FM sidebands at any setting. See the
 module docstring in fm_synth.py for the full reasoning.
@@ -16,7 +16,7 @@ the plain `wave` oscillator at ordinary Synth cost, and that fm_ratio always
 rounds to a non-negative integer even from float/patch input.
 
 No DSP: the stubs do not resample or render audio, so this cannot check the
-table's actual waveform content -- only identity and wiring. Correctness of
+table's actual waveform content; only identity and wiring. Correctness of
 fill_pm_wave() itself (sideband placement, wrap continuity) is a numeric
 question for real numpy, not these stubs; sanity-check it in the scratchpad
 with an FFT if the formula changes.
@@ -81,7 +81,7 @@ ck(pm_wave is not None, "the shared PM table must exist")
 s.note_on(60, velocity=100)
 n = s.voices[60][0]
 ck(n.waveform is pm_wave, "an FM-on voice's waveform must be the shared PM table")
-ck(n.bend is s._bend, "FM no longer touches bend at all -- must be the plain shared bend")
+ck(n.bend is s._bend, "FM no longer touches bend at all, must be the plain shared bend")
 
 # --- every FM-on voice shares the SAME table object -----------------------
 s.note_on(64, velocity=80)
@@ -95,7 +95,7 @@ s.fm_index = 2.5
 after = list(pm_wave)
 ck(before != after, "changing fm_index must rewrite the shared table's contents")
 ck(n.waveform is pm_wave and n2.waveform is pm_wave,
-   "the rewrite must happen IN PLACE -- both sounding voices keep the same buffer identity")
+   "the rewrite must happen IN PLACE, both sounding voices keep the same buffer identity")
 
 # --- FM off: falls back to the plain oscillator, no PM table involved -----
 s.all_notes_off()

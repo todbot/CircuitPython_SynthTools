@@ -88,31 +88,31 @@ extend-select = [
 ignore = [
     "PLR2004", # magic-value-comparison
     "UP030", # format literals
-    "UP031", # printf-string-formatting -- this project uses %-style formatting on purpose
+    "UP031", # printf-string-formatting, this project uses %-style formatting on purpose
     "PLW1514",  # unspecified-encoding
 
-    # trimmed after hitting these on a codebase that predates pre-commit --
+    # trimmed after hitting these on a codebase that predates pre-commit,
     # all style/complexity opinions, none of them bugs, here.
-    "PLR6201",  # literal-membership -- a set literal buys nothing for a
+    "PLR6201",  # literal-membership, a set literal buys nothing for a
                 # two- or three-item tuple, and costs a set construction
     "PLR0917",  # too-many-positional-arguments
-    "PLR0913",  # too-many-arguments -- Patch() is a config object; many
+    "PLR0913",  # too-many-arguments, Patch() is a config object; many
                 # kwargs is the point, not a smell
-    "PLC0415",  # import-outside-top-level -- the existing optional-dependency
+    "PLC0415",  # import-outside-top-level, the existing optional-dependency
                 # guard (import adafruit_wave inside a function) is deliberate
-    "PLR6301",  # no-self-use -- ruff's own template leaves this commented
+    "PLR6301",  # no-self-use, ruff's own template leaves this commented
                 # out as "unstable"; it was firing anyway via the blanket
                 # "PL" select
     "PLR6104",  # non-augmented-assignment
     "PLR1730",  # if-stmt-min-max
     "PLR0904",  # too-many-public-methods
-    "PLW0603",  # global-statement -- deliberate here: a single `note`
+    "PLW0603",  # global-statement, deliberate here: a single `note`
                 # shared between two keypad callbacks in demo scripts, and
                 # a module-level lazy-init cache in waves.py
 ]
 
 [lint.per-file-ignores]
-# __init__.py imports are re-exports, not dead code -- the whole public API
+# __init__.py imports are re-exports, not dead code, the whole public API
 # (Patch, SubtractiveSynth, etc.) is imported here and never referenced
 # again in this file on purpose.
 "__init__.py" = ["F401"]

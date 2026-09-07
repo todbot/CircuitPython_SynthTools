@@ -38,7 +38,7 @@ while True:
     i += 1
 
     # live filter sweep: one write into a shared block, O(1) in polyphony.
-    # deadband it -- a jittery pot otherwise writes on every single frame.
+    # deadband it: a jittery pot otherwise writes on every single frame.
     sweep = (sweep + 7) % 100
     new_f = 100 + 30 * sweep
     if abs(new_f - synth.filt_f) > 5:

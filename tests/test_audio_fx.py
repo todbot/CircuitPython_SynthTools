@@ -5,7 +5,7 @@ cutoff/resonance tracking, and the set_drive()/sync_delay() helpers.
 
 The interesting claim for the chain itself is that add/insert/remove keep
 every effect's `.play(source)` pointed at whatever now precedes it, and
-that EffectsChain needs no audiofilters import at all to do that -- only
+that EffectsChain needs no audiofilters import at all to do that: only
 building a specific effect (tracking_filter, or a caller's own Distortion/
 Echo) does.
 
@@ -101,7 +101,7 @@ fx.remove(head)
 ck(fx.effects == (a, b), "removing the head must rewire the new head to the synth")
 ck(a.source is syn0.synthio, "...specifically, straight back to the synth")
 
-# insert() must normalize the index like list.insert does -- a raw pass-
+# insert() must normalize the index like list.insert does, a raw pass-
 # through of a negative or out-of-range index into _rewire() would either
 # rewire the wrong stage or IndexError after the list was already mutated
 fx.insert(-1, _Stage("before-tail"))
@@ -116,7 +116,7 @@ ck(fx.effects[-1].name == "past-end", "insert() past the end must behave like ap
 ck(fx.effects[-1].source is fx.effects[-2], "...and still be wired to the true previous tail")
 fx.remove(fx.effects[-1])
 
-# EffectsChain must not need audiofilters at all -- only building a
+# EffectsChain must not need audiofilters at all, only building a
 # specific effect (tracking_filter, or a caller's own Distortion/Echo)
 # should. Prove it by knocking the module out from under audio_fx and
 # confirming the chain still works with plain stand-in effects.
@@ -140,11 +140,11 @@ ck(cb in syn.synthio.blocks,
 
 tf = tracking_filter(syn, stages=2)
 ck(isinstance(tf.filter, tuple) and len(tf.filter) == 2,
-   "the stages must go into ONE Filter as a tuple of biquads -- a Filter "
+   "the stages must go into ONE Filter as a tuple of biquads, a Filter "
    "each would cost an extra buffer and pass per stage")
 ck(all(b.frequency is cb for b in tf.filter), "every stage must track the synth's cutoff")
 ck(all(b.Q is syn._filt_q_blk for b in tf.filter),
-   "every stage must ALSO track the synth's resonance -- the original this "
+   "every stage must ALSO track the synth's resonance, the original this "
    "was ported from pushes Q into every filter by hand on a knob turn; "
    "here it must be automatic, because they share the live block")
 syn.filt_q = 2.4
@@ -159,7 +159,7 @@ for n in (36, 38, 40):
     syn.note_off(n)
 ck(all(f is bq for f in seen),
    "mono reuses ONE Biquad for every note rather than allocating a pair "
-   "each time -- the same arrangement as the synth this was ported from")
+   "each time, the same arrangement as the synth this was ported from")
 
 # it must carry the whole bus, not just filt_f
 syn.note_on_step(36)
@@ -170,7 +170,7 @@ env.c.phase = 1.0
 bottom = cb.value
 ck(abs(top - 1200.0) < 1e-6, "cutoff must start the sweep at filt_f, got %r" % top)
 ck(abs(bottom - 300.0) < 1e-6,
-   "cutoff must FOLLOW the envelope down -- that is the whole point of "
+   "cutoff must FOLLOW the envelope down, that is the whole point of "
    "tracking, got %r" % bottom)
 syn.note_off(36)
 
@@ -199,7 +199,7 @@ poly = SubtractiveSynth(synthio.Synthesizer(), Patch(detune=1.0))
 ck(not hasattr(poly, "filter"), "the shared filter belongs to BasslineSynth, not Synth")
 try:
     tracking_filter(poly, stages=1)
-    ck(False, "a poly synth has no .filter -- tracking_filter must refuse it")
+    ck(False, "a poly synth has no .filter, tracking_filter must refuse it")
 except ValueError:
     pass
 
@@ -211,7 +211,7 @@ except ValueError:
 
 try:
     tracking_filter(make(), stages=0)
-    ck(False, "stages < 1 must be refused -- an empty chain already needs no filter")
+    ck(False, "stages < 1 must be refused, an empty chain already needs no filter")
 except ValueError:
     pass
 
@@ -241,8 +241,8 @@ ck(abs(echo.delay_ms - 4 * (60_000.0 / 130 / 4)) < 1e-6,
 
 default = make()
 ck(default.output is default.synthio,
-   "the default patch must build nothing -- no extra filter, no "
-   "distortion, no echo -- and cost nothing")
+   "the default patch must build nothing, no extra filter, no "
+   "distortion, no echo, and cost nothing")
 
 stages_syn = make(fx_filter_stages=2, fx_filter_mix=0.6)
 ck(isinstance(stages_syn.fx.effects[0].filter, tuple)
@@ -255,7 +255,7 @@ ck(stages_syn.fx.effects[0].mix == 0.6, "fx_filter_mix must reach the built stag
 no_filter = make(filt_type=None, fx_filter_stages=2)
 ck(no_filter.output is no_filter.synthio,
    "fx_filter_stages > 0 with filt_type=None must build nothing and raise "
-   "nothing -- there is no cutoff to track, same as _voice_cutoff()'s own "
+   "nothing, there is no cutoff to track, same as _voice_cutoff()'s own "
    "silent no-op")
 
 dist_syn = make(fx_distortion_on=True, fx_drive=0.5, fx_drive_mix=0.4)
@@ -277,7 +277,7 @@ kinds = [type(e).__name__ for e in full_syn.fx.effects]
 ck(kinds == ["Filter", "Distortion", "Echo"],
    "the owned chain's order must be fixed: filter, then distortion, then echo")
 
-# --- live knobs reach an already-built chain without disturbing identity --
+# --- live knobs reach an already-built chain without disturbing identity,
 
 live_syn = make(fx_distortion_on=True)
 chain_before = live_syn.fx
@@ -285,7 +285,7 @@ dist_before = live_syn.fx.effects[0]
 live_syn.fx_drive = 0.9
 live_syn.fx_drive_mix = 0.7
 ck(live_syn.fx is chain_before and live_syn.fx.effects[0] is dist_before,
-   "a LIVE knob must never rebuild the chain -- only structural fields do")
+   "a LIVE knob must never rebuild the chain, only structural fields do")
 ck(dist_before.mix == 0.7, "fx_drive_mix must reach the object already playing")
 
 # --- structural changes invalidate the CHAIN, but leave the still-playing
@@ -302,14 +302,14 @@ ck(struct_syn._fx_dist is old_dist,
 struct_syn.fx_drive = 0.8  # a live knob, written before the rebuild happens
 ck(old_dist.pre_gain == 40.0,
    "a live knob must still reach the OLD, still-playing object even mid-"
-   "transition -- it is what the mixer is actually sounding")
+   "transition, it is what the mixer is actually sounding")
 new_chain = struct_syn.fx  # forces the rebuild
 ck(new_chain is not old_chain and len(new_chain.effects) == 2,
    "the rebuild must produce a NEW chain reflecting the structural change")
 
 # --- a filt_type change must invalidate the owned chain too --------------
 # tracking_filter() copies the voice Biquad's `mode` as a plain VALUE, not
-# a live block like frequency/Q -- so left alone, a filt_type change would
+# a live block like frequency/Q, so left alone, a filt_type change would
 # leave the voice on the new mode and an owned stage stuck on the old one.
 
 mode_syn = make(filt_type="LPF", fx_filter_stages=1)
@@ -317,7 +317,7 @@ mode_chain = mode_syn.fx
 old_stage_mode = mode_syn.fx.effects[0].filter[0].mode
 mode_syn.filt_type = "HPF"
 ck(mode_syn._fx is None,
-   "a real filt_type change must invalidate the owned chain -- the owned "
+   "a real filt_type change must invalidate the owned chain, the owned "
    "stages copied the OLD mode as a value and have no way to track a new one")
 ck(mode_syn.fx is not mode_chain, "...so the next access must rebuild it")
 ck(mode_syn.fx.effects[0].filter[0].mode == mode_syn.filter.mode
@@ -339,7 +339,7 @@ same_shape.load_patch(Patch(wave="SAW", filt_f=1200, envmod=0.75,
                              fx_distortion_on=True, fx_drive=0.6))
 ck(same_shape._fx is chain_id and same_shape.fx.effects[0] is dist_id,
    "loading a patch with the SAME fx shape must reach the live effect, "
-   "not rebuild -- the whole point of _recompile() comparing before "
+   "not rebuild, the whole point of _recompile() comparing before "
    "invalidating")
 ck(dist_id.pre_gain == 30.0, "...and the new drive value must actually be there")
 
@@ -385,7 +385,7 @@ pset.set_param("fx_drive_mix", 0.55)
 ck(pset.fx_drive_mix == 0.55, "set_param must reach a LIVE fx_* field")
 try:
     pset.set_param("fx_distortion_on", True)
-    ck(False, "set_param must refuse a STRUCTURAL fx_* field -- a MIDI CC "
+    ck(False, "set_param must refuse a STRUCTURAL fx_* field, a MIDI CC "
               "silently muting the fx chain (nothing re-play()s the mixer) "
               "is worse than just not exposing the switch there")
 except KeyError:

@@ -29,9 +29,9 @@ Names are resolved LAZILY: ``from synthtools import Patch`` imports
 loaded, so adding a synth style to this library costs nothing to anyone who
 does not use it.
 
-That matters on a microcontroller. Re-exporting eagerly -- the ordinary
+That matters on a microcontroller. Re-exporting eagerly (the ordinary
 desktop pattern of ``from .bassline_synth import BasslineSynth`` at module
-level -- pulled in EVERY module on any touch of the package, measured at
+level) pulled in EVERY module on any touch of the package, measured at
 52,784 bytes of a Pico's ~137 KB free RAM, and it could not be dodged from
 the call site: importing a submodule runs this file first either way. Do not
 reintroduce eager re-exports here.
@@ -64,10 +64,9 @@ _LAZY = {
     "SubtractiveSynth": "subtractive_synth",
     "SwarmSynth": "swarm_synth",
     "Synth": "synth",
-    # These two additionally need the adafruit_wave library. Asking for one
-    # without it raises ImportError naming adafruit_wave -- which is more
-    # use than the try/except this file used to carry, where the names just
-    # silently did not exist.
+    # These two additionally need adafruit_wave. Asking for one without it
+    # raises ImportError naming adafruit_wave, rather than the name simply
+    # not existing.
     "Wavetable": "wavetable",
     "WavetableSynth": "wavetable_synth",
 }
@@ -81,7 +80,7 @@ def __getattr__(name):
     Verified on CircuitPython 10.3.0-alpha.3 as well as CPython and
     MicroPython. Note the import must be spelled as an absolute
     ``__import__`` of the dotted path: ``from . import <mod>`` re-enters
-    this function on MicroPython -- a package-attribute lookup -- and
+    this function on MicroPython (a package-attribute lookup) and
     recurses into AttributeError.
     """
     modname = _LAZY.get(name)

@@ -23,7 +23,7 @@ where ``knob_was`` is the position the knob moved FROM, not the one it
 landed on. That is what makes the two converge: dividing by the runway the
 knob had *before* the move gives a value change exactly equal to the knob
 change whenever the two already match, for any size of step. Dividing by
-the runway left *after* the move -- which this did until it was fixed --
+the runway left *after* the move (which this did until it was fixed)
 makes a matched knob overshoot instead: a 60-count turn from a matched
 centre moved the value 114.
 
@@ -42,7 +42,7 @@ MATCH_WINDOW = const(5)
 
 #: Knob movement below this is treated as not having happened. A scaler is
 #: driven by DELTAS, and a raw ADC never sits still, so without this the
-#: noise alone drags the value across the range -- see the class docstring.
+#: noise alone drags the value across the range; see the class docstring.
 #: Must be larger than whatever noise survives on your knob reading.
 DEADBAND = const(1)
 
@@ -59,13 +59,13 @@ class ParamScaler:
     :param match_window: how close the knob must come to the value before
         it locks to 1:1 tracking.
     :param deadband: knob movement below this counts as no movement. See
-        below -- this is not optional on real hardware.
+        below: this is not optional on real hardware.
 
     **A deadband is required, and it is not a nicety.** The step is scaled
     by the runway on the side the knob moved TOWARD, so the two directions
     are not symmetric. With the value at 10 and the knob sitting at 200, a
     single count of noise upward moves the value +4.46 while a count
-    downward moves it -0.05 -- 89:1. Symmetric ADC noise is therefore a
+    downward moves it -0.05: 89:1. Symmetric ADC noise is therefore a
     RATCHET that walks the value onto the knob: measured in simulation,
     +/-0.5 counts of noise dragged an untouched value from 10 to 114 in
     200 updates. The symptom is a value that "tracks the pots" on its own
@@ -99,9 +99,9 @@ class ParamScaler:
         knob_delta = knob_pos - knob_was
 
         # Has the knob actually moved? Checked FIRST, so a resting pot
-        # neither ratchets the value (see the class docstring) nor jitters
-        # it once locked. knob_pos_last is deliberately NOT updated here,
-        # so movement under the deadband accumulates until it clears.
+        # neither ratchets the value nor jitters it once locked.
+        # knob_pos_last is deliberately NOT updated here, so movement under
+        # the deadband accumulates until it clears.
         if -self.deadband < knob_delta < self.deadband:
             return self.val
 
@@ -111,12 +111,11 @@ class ParamScaler:
             self.val = knob_pos
             return knob_pos
 
-        # Catch up when the knob comes close -- but only if doing so does
-        # not move the value AGAINST the way the knob is being turned.
-        # Snapping unconditionally means turning a knob down can jerk the
-        # value up by as much as match_window to meet it. Skipping the
-        # latch just leaves the proportional move below, which converges
-        # anyway, so the knob still catches within a turn or two.
+        # Catch up when the knob comes close, but only if doing so does not
+        # move the value AGAINST the way the knob is being turned. Snapping
+        # unconditionally lets turning a knob down jerk the value up by as
+        # much as match_window to meet it. Skipping the latch leaves the
+        # proportional move below, which converges within a turn or two.
         if abs(knob_pos - self.val) < self.match_window and (
             (knob_pos - self.val) * knob_delta >= 0
         ):
@@ -124,9 +123,9 @@ class ParamScaler:
             self.val = knob_pos
             return knob_pos
 
-        # Runway is measured from knob_was, the position the knob moved
-        # FROM -- see the module docstring for why. A knob that did not
-        # move falls through both branches and leaves the value alone.
+        # Runway is measured from knob_was, the position the knob moved FROM;
+        # see the module docstring for why. A knob that did not move falls
+        # through both branches and leaves the value alone.
         if knob_delta > 0:
             runway = knob_max - knob_was
             if runway > 0:

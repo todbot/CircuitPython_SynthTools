@@ -1,59 +1,47 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
 # SPDX-License-Identifier: MIT
 #
-# bassline_synth.py - the squelchy acid bassline voice, after the Roland
+# bassline_synth.py -- the squelchy acid bassline voice, after the Roland
 # TB-303: monophonic, one oscillator, per-step slide and accent.
 #
 # Built straight on Synth with `mono = True`: the slide is Synth's own
-# glide given a per-step time, and the one-voice stealing comes with the
-# switch. There is no monosynth base class -- there turned out to be
-# nothing left for one to hold.
-#
-# NOTE a slide here glides the pitch but still RETRIGGERS the envelopes.
-# A real 303 holds the gate high across a slide so the two steps tie into
-# one note; doing that means retuning the sounding voice in place instead
-# of re-pressing it, which is a chunk of machinery this does not have yet.
-# The synth this was ported from behaves the same way (its note_on_step
-# carries a "FIXME also do appropriate other actions for slide").
+# glide given a per-step time, and one-voice stealing comes with the switch.
+# There is no monosynth base class; nothing was left for one to hold.
 #
 # --- the two things that make it a 303 --------------------------------
 #
-# 1. A DECAY-ONLY filter envelope. The cutoff jumps to its peak at
-#    note-on and falls back while the key is still down. Synth's AHR
-#    envelope holds at peak instead of falling, which looks like the wrong
-#    shape entirely -- but AHR with a NEGATIVE amount is exactly this:
+# 1. A DECAY-ONLY filter envelope. The cutoff jumps to its peak at note-on
+#    and falls back while the key is still down. Synth's AHR envelope holds
+#    at peak instead of falling, which looks like the wrong shape, but AHR
+#    with a NEGATIVE amount is exactly this:
 #
 #        filt_f      the peak the sweep starts from
 #        fenv_amount -envmod * filt_f, so the sweep runs DOWNWARD
 #        fenv_attack the fall time (a decay, despite the name)
 #
-#    The shape buffer is 1-(1-t)^curve, fast-then-easing, which run
-#    downward is the quick drop and long tail the 303 is known for. No new
-#    envelope class, and every one of those is still a shared block, so
-#    the whole thing stays O(1) live. FILT_F_MIN earns its keep here:
-#    envmod = 1.0 aims the sweep at 0 Hz and the clamp catches it.
+#    The shape buffer is 1-(1-t)^curve, fast-then-easing, which run downward
+#    is the quick drop and long tail the 303 is known for. Everything there
+#    is still a shared block, so it stays O(1) live. FILT_F_MIN earns its
+#    keep: envmod = 1.0 aims the sweep at 0 Hz and the clamp catches it.
 #
 #    envmod being a FRACTION of filt_f rather than a number of Hz is the
-#    303's own arrangement, and it is why the envelope tracks the cutoff
-#    knob: turning cutoff up makes the sweep proportionally bigger.
+#    303's own arrangement, and why the envelope tracks the cutoff knob.
 #
-# 2. ACCENT, which must not contaminate the patch. On an accented step a
-#    303 raises the cutoff, the resonance, the envelope depth and the
-#    level -- and those are all shared blocks here, so the obvious
-#    implementation writes filt_f and filt_q and then save_patch() stores
-#    the accented values as if they were the knob positions.
+# 2. ACCENT, which must not contaminate the patch. An accented step raises
+#    cutoff, resonance, envelope depth and level, all shared blocks here, so
+#    the obvious implementation writes filt_f and filt_q and then
+#    save_patch() stores the accented values as knob positions.
 #
-#    So accent writes the SPARE INPUTS of blocks Synth already built,
-#    never the ones Synth reads back:
+#    So accent writes the SPARE INPUTS of blocks Synth already built, never
+#    the ones Synth reads back:
 #
 #        cutoff     _filt_sum.c    sum3()'s unused third input
 #        resonance  _filt_q_blk.b  scalar_block()'s unused second input
 #
-#    Both are inside the graph the voice already reads, so an accent is
-#    still one write and still reaches a sounding note; and filt_f and
-#    filt_q read back clean, because Synth reads .a of each. Only
-#    fenv_amount has no spare slot -- it is derived from envmod anyway, so
-#    _decompile() re-derives the un-accented value on save.
+#    Both sit inside the graph the voice already reads, so an accent is
+#    still one write and still reaches a sounding note, while filt_f and
+#    filt_q read back clean. Only fenv_amount has no spare slot; it is
+#    derived from envmod anyway, so _decompile() re-derives it on save.
 
 import synthio
 
@@ -81,11 +69,11 @@ class BasslineSynth(Synth):
     303 knob    here
     ==========  ====================================================
     tuning      ``transpose`` (semitones)
-    cutoff      ``filt_f`` -- the peak the filter sweep starts from
+    cutoff      ``filt_f``, the peak the filter sweep starts from
     resonance   ``filt_q``
-    env mod     ``envmod`` -- sweep depth as a FRACTION of filt_f
-    decay       ``decay`` -- seconds, both the filter fall and the amp
-    accent      ``accent`` -- how much an accented step is boosted
+    env mod     ``envmod``, sweep depth as a FRACTION of filt_f
+    decay       ``decay``, seconds, both the filter fall and the amp
+    accent      ``accent``, how much an accented step is boosted
     ==========  ====================================================
 
     Play it a step at a time with note_on_step(), which takes the 303's
@@ -107,18 +95,16 @@ class BasslineSynth(Synth):
     _PARAMS = Synth._PARAMS + ("wave", "envmod", "decay", "amp_level",
                                "accent", "accent_cutoff", "accent_q",
                                "slide_time", "transpose",
-                               # the three STRUCTURAL fx_* fields
-                               # (fx_filter_stages, fx_distortion_on,
-                               # fx_echo_on) are deliberately absent: a
-                               # set_param() from a MIDI CC would silently
-                               # mute the fx chain, since nothing here can
-                               # reach into the mixer and re-play() the
-                               # new tail. See the "effects chain" section.
+                               # the three STRUCTURAL fx_* fields are
+                               # deliberately absent: a set_param() from a
+                               # MIDI CC would silently mute the chain,
+                               # since nothing here can reach into the
+                               # mixer and re-play() the new tail
                                "fx_filter_mix", "fx_drive", "fx_drive_mix",
                                "fx_delay_ms", "fx_delay_mix", "fx_delay_decay")
     # fmt: on
 
-    #: Inherently monophonic -- accent and glide are both shared state
+    #: Inherently monophonic; accent and glide are both shared state
     #: that assumes a single voice.
     mono = True
 
@@ -144,7 +130,7 @@ class BasslineSynth(Synth):
 
     # --- the owned effects chain: class attrs; see _build_fx() ----------
     FX_BUFFER_SIZE = 1024
-    FX_MAX_DELAY_MS = 1000.0  # buffer sizing only, not a knob -- see fx_delay_ms
+    FX_MAX_DELAY_MS = 1000.0  # buffer sizing only, not a knob; see fx_delay_ms
     _fx_filter_stages = 0
     _fx_filter_mix = 1.0
     _fx_distortion_on = False
@@ -188,9 +174,7 @@ class BasslineSynth(Synth):
         # Compare the three STRUCTURAL fields against what's already live
         # BEFORE overwriting them: only a real shape change should drop
         # self._fx. A patch load that leaves the fx shape alone must reach
-        # the live effects the same as every other param here, not freeze
-        # them -- see the "effects chain" section for why a naive
-        # unconditional invalidate is a silent wrong-sound bug.
+        # the live effects like every other param here, not freeze them.
         new_stages = getattr(p, "fx_filter_stages", 0)
         new_distortion_on = getattr(p, "fx_distortion_on", False)
         new_echo_on = getattr(p, "fx_echo_on", False)
@@ -224,8 +208,8 @@ class BasslineSynth(Synth):
         p.accent_q = self._accent_q
         p.slide_time = self._slide_time
         # super() saved whatever the last step left in the shared block,
-        # which on an accented step is the boosted depth. envmod is the
-        # real knob, so re-derive the clean value rather than store that.
+        # which on an accented step is the boosted depth. envmod is the real
+        # knob, so re-derive the clean value rather than store that.
         p.fenv_amount = -self._envmod * self._filt_f_blk.a
         p.fx_filter_stages = self._fx_filter_stages
         p.fx_filter_mix = self._fx_filter_mix
@@ -239,12 +223,9 @@ class BasslineSynth(Synth):
 
     # --- the shared filter ------------------------------------------------
     # Mono, so ONE Biquad and one cutoff node serve every note: built once
-    # and re-aimed, not allocated per note. Synth rebuilds both each
-    # note-on because in poly it has to. Here it does not, and holding
-    # still is what lets audio_fx point extra stages at this cutoff once
-    # and have them track forever -- the same trick as the synth this was
-    # ported from, which shares one filt_env LFO between its voice filter
-    # and its effect filters.
+    # and re-aimed, not allocated per note the way poly forces Synth to.
+    # Holding still is what lets audio_fx point extra stages at this cutoff
+    # once and have them track forever.
 
     def _build_filter(self):
         """Create the shared cutoff node and Biquad, once."""
@@ -268,8 +249,8 @@ class BasslineSynth(Synth):
     def filter(self):
         """The one Biquad every note plays through.
 
-        Its ``frequency`` is a stable node carrying the whole cutoff bus --
-        filt_f, the filter LFO, the envelope sweep, the accent -- so a
+        Its ``frequency`` is a stable node carrying the whole cutoff bus (
+        filt_f, the filter LFO, the envelope sweep, the accent), so a
         downstream stage can point at it once and follow all of it. That is
         all ``audio_fx.EffectsChain`` needs.
         """
@@ -298,11 +279,10 @@ class BasslineSynth(Synth):
 
     # --- the owned effects chain (optional) -------------------------------
     # A specialized EffectsChain, not the general-purpose one: fixed order
-    # (filter -> distortion -> echo, the acid-bass signal flow), built
-    # from the SAME tracking_filter()/set_drive() free functions the demo
-    # used to call by hand. The three fx_*_on/fx_filter_stages fields are
-    # STRUCTURAL -- they decide what exists -- everything else is a LIVE
-    # write into whatever's already built. See fx_drive and friends below.
+    # (filter -> distortion -> echo, the acid-bass signal flow), built from
+    # the same tracking_filter()/set_drive() free functions. The three
+    # fx_*_on/fx_filter_stages fields are STRUCTURAL, deciding what exists;
+    # everything else is a LIVE write into whatever is already built.
 
     def _fx_cfg(self):
         s = self.synthio
@@ -319,18 +299,18 @@ class BasslineSynth(Synth):
         _fx_delay are only assigned once every requested piece succeeds.
         Assigning self._fx as each piece is built and then raising partway
         (audiofilters present but audiodelays isn't, say) would leave
-        self._fx non-None with an fx_echo_on that never got its Echo --
+        self._fx non-None with an fx_echo_on that never got its Echo:
         later code would treat the chain as already built and never retry.
         """
         if self._fx is not None:
             return
         chain = EffectsChain(self)
         stage = dist = delay = None
-        # No filter to track with filt_type=None -- an ordinary, silent
-        # no-op, the same as _voice_cutoff() returning None. tracking_filter
-        # itself raises ValueError for external callers who don't already
-        # know why; internally we do, so we just skip the stage instead of
-        # letting that surface from an `output` property read.
+        # No filter to track with filt_type=None: an ordinary silent no-op,
+        # like _voice_cutoff() returning None. tracking_filter() raises
+        # ValueError for external callers who don't already know why;
+        # internally we do, so skip the stage rather than let that surface
+        # from an `output` property read.
         if self._fx_filter_stages > 0 and self._filt_mode is not None:
             stage = chain.add(
                 tracking_filter(self, stages=self._fx_filter_stages, mix=self._fx_filter_mix)
@@ -358,7 +338,7 @@ class BasslineSynth(Synth):
     def _push_fx_live(self):
         """Push the current fx_* values into whatever's already built.
 
-        A no-op for anything not built yet -- called by every live fx_*
+        A no-op for anything not built yet: called by every live fx_*
         setter AND by _recompile(), so a patch load reaches a chain that's
         already sounding exactly like every other param in this class,
         even mid-transition after a structural change has invalidated
@@ -378,7 +358,7 @@ class BasslineSynth(Synth):
     def fx(self):
         """The owned effects chain, built the first time anything needs
         it. Add/insert/remove more effects on it if you want to extend
-        past filter+distortion+echo -- it's an ordinary ``EffectsChain``.
+        past filter+distortion+echo: it's an ordinary ``EffectsChain``.
         """
         self._build_fx()
         return self._fx
@@ -390,11 +370,11 @@ class BasslineSynth(Synth):
 
         A mixer voice's ``play()`` captures this object's identity at
         call time. Changing any STRUCTURAL field (``fx_filter_stages``,
-        ``fx_distortion_on``, ``fx_echo_on`` -- directly, via
+        ``fx_distortion_on``, ``fx_echo_on``: directly, via
         ``set_param()``, or via ``load_patch()``) invalidates the owned
         chain, so re-fetch ``output`` and hand it to the mixer voice
         again afterward. The LIVE fx knobs (mix, drive, delay time) need
-        no such thing -- they reach whatever's already playing.
+        no such thing: they reach whatever's already playing.
         """
         return self.fx.output
 
@@ -406,7 +386,7 @@ class BasslineSynth(Synth):
         Called on every note-on and whenever a knob it depends on moves, so
         an accented note that is still sounding tracks the knob too. Every
         write here is O(1) and lands on a spare input, so nothing Synth
-        reads back is disturbed -- see the module comment.
+        reads back is disturbed: see the module comment.
         """
         if self._accent_on:
             boost = self._accent_cutoff * self._accent
@@ -429,7 +409,7 @@ class BasslineSynth(Synth):
         ``slide`` glides from the previous step and ties to it, so the
         envelopes keep running. ``accent`` boosts cutoff, resonance,
         envelope depth and level for this step and every step after it,
-        until an un-accented one puts them back -- which is how the
+        until an un-accented one puts them back, which is how the
         original behaves, the accent living in shared state rather than in
         the voice.
         """
@@ -456,9 +436,8 @@ class BasslineSynth(Synth):
         # fmt: on
 
     # --- amp envelope -----------------------------------------------------
-    # Two cached Envelopes rather than one: synthio.Envelope is immutable,
-    # so the accented level would otherwise mean building a new one at
-    # every accented note-on.
+    # Two cached Envelopes rather than one: synthio.Envelope is immutable, so
+    # the accented level would otherwise mean a new one at every accent.
 
     def _env_for(self, level):
         a, d, s, r = self._amp_env
@@ -494,12 +473,11 @@ class BasslineSynth(Synth):
     @filt_type.setter
     def filt_type(self, v):
         # Overridden to also invalidate the owned fx chain on a real mode
-        # change. _build_filter() already re-swaps the VOICE Biquad live
-        # (its frequency/Q are shared blocks, but `mode` isn't), and
-        # tracking_filter() copies that same mode as a plain value into
-        # each owned stage -- so left alone, a filt_type change would
-        # leave the voice on the new mode and the owned stages stuck on
-        # the old one: wrong sound, no exception.
+        # change. _build_filter() re-swaps the VOICE Biquad live, but
+        # tracking_filter() copies `mode` into each owned stage as a plain
+        # value, so left alone a filt_type change would leave the voice on
+        # the new mode and the stages stuck on the old: wrong sound, no
+        # exception.
         old_mode = self._filt_mode
         self._filt_type = v
         self._filt_mode = FILTER_MODES.get(v)
@@ -523,7 +501,7 @@ class BasslineSynth(Synth):
     def decay(self):
         """Seconds for the filter sweep to fall. The 303's Decay knob.
 
-        This drives the FILTER envelope only -- ``amp_env`` (or
+        This drives the FILTER envelope only: ``amp_env`` (or
         ``decay_time``) is the amp's, and wants to be LONGER than this.
         An earlier version tied the two together, which sounds like one
         knob but makes envmod nearly inaudible: if the note fades out at
@@ -532,7 +510,7 @@ class BasslineSynth(Synth):
         alive underneath the sweep and the filter movement is obvious.
 
         It also has to be SHORTER than the gate, or the sweep is cut off
-        partway and envmod does much less than its number suggests -- see
+        partway and envmod does much less than its number suggests: see
         the filter-envelope notes in the project docs.
         """
         return self._fenv.attack
@@ -610,14 +588,14 @@ class BasslineSynth(Synth):
 
     # --- owned effects chain: the three STRUCTURAL switches --------------
     # Changing any of these invalidates self._fx (rebuilt lazily, next
-    # .fx/.output access) but leaves whatever is currently built alone --
-    # it's still what the mixer is playing. See "the owned effects chain"
-    # above for why, and output's docstring for the resulting contract.
+    # .fx/.output access) but leaves whatever is currently built alone,
+    # since that is still what the mixer is playing. output's docstring
+    # carries the resulting contract.
 
     @property
     def fx_filter_stages(self):
         """Extra 12 dB/octave Biquad stages cascaded after the voice's own
-        filter, via ``tracking_filter()``. 0 = none (the default -- costs
+        filter, via ``tracking_filter()``. 0 = none (the default, costs
         nothing and never touches ``audiofilters``). Has no effect while
         ``filt_type`` is ``None``: there is no cutoff to track."""
         return self._fx_filter_stages
@@ -642,7 +620,7 @@ class BasslineSynth(Synth):
 
     @property
     def fx_echo_on(self):
-        """Whether an echo stage exists at all -- see ``fx_distortion_on``,
+        """Whether an echo stage exists at all; see ``fx_distortion_on``,
         same reasoning."""
         return self._fx_echo_on
 
@@ -652,8 +630,8 @@ class BasslineSynth(Synth):
         self._fx = None
 
     # --- owned effects chain: the six LIVE knobs --------------------------
-    # Each reaches whatever's already built via _push_fx_live(); a no-op
-    # until the matching structural switch above turns the effect on.
+    # Each reaches whatever is already built via _push_fx_live(), and is a
+    # no-op until the matching structural switch above turns the effect on.
 
     @property
     def fx_filter_mix(self):
@@ -708,7 +686,7 @@ class BasslineSynth(Synth):
 
     @property
     def fx_delay_decay(self):
-        """Echo feedback, 0..1 -- how much each repeat carries into the
+        """Echo feedback, 0..1; how much each repeat carries into the
         next. Unrelated to ``decay``, the filter-envelope fall time."""
         return self._fx_delay_decay
 

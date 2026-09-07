@@ -88,22 +88,20 @@ class ParamSet:
         self.nknobs = num_knobs
         self.min_change = min_knob_change
         self.smoothing = knob_smooth
-        # KNOB_SCALE only: knob movement, as a fraction of full travel,
-        # below which nothing happens. A pot's ADC jitter is a real
-        # movement to a delta-based mode, so without this a resting knob
-        # rewrites its parameter on every single pass -- and writing
-        # attack/decay/sustain/release rebuilds a synthio.Envelope and
-        # pushes it to every sounding note. Measured jitter on a
-        # pico_test_synth pot, already low-pass filtered, is ~0.0013.
+        # KNOB_SCALE only: knob movement, as a fraction of full travel, below
+        # which nothing happens. A pot's ADC jitter reads as real movement to
+        # a delta-based mode, so without this a resting knob rewrites its
+        # parameter every pass, and writing attack/decay/sustain/release
+        # rebuilds a synthio.Envelope and pushes it to every sounding note.
+        # Measured jitter on a filtered pico_test_synth pot is ~0.0013.
         self.knob_deadband = knob_deadband
         self.nknobsets = self.nparams // self.nknobs
         self._idx = 0  # which knobset we're modifying
         self.is_tracking = [False] * self.nknobs
-        # Where each knob was on the previous update. KNOB_SCALE needs it:
-        # it works from how far the knob MOVED, which cannot be recovered
-        # from the position alone. None until the first update_knobs(), so
-        # the first call adopts the knobs rather than reading a move from
-        # an assumed zero.
+        # Where each knob was on the previous update. KNOB_SCALE works from
+        # how far the knob MOVED, which the position alone cannot give.
+        # None until the first update_knobs(), so that call adopts the knobs
+        # rather than reading a move from an assumed zero.
         self.knob_pos_last = None
 
     def next_knobset(self):
@@ -179,24 +177,22 @@ class ParamSet:
             knob_was = self.knob_pos_last[i]
             knob_delta = knob - knob_was
             if -self.knob_deadband < knob_delta < self.knob_deadband:
-                # Deliberately leave knob_pos_last alone, so movement
-                # under the deadband ACCUMULATES until it clears rather
-                # than being dropped -- otherwise a slow turn is silently
-                # thrown away one sample at a time.
+                # Deliberately leave knob_pos_last alone, so movement under
+                # the deadband ACCUMULATES until it clears; otherwise a slow
+                # turn is thrown away one sample at a time.
                 continue
             self.knob_pos_last[i] = knob
 
             new_val = param.knob_to_val(knob)
-            # Once the knob has caught up, it stays 1:1. is_tracking is
-            # the same latch PICKUP uses, and idx's setter clears it on a
-            # page turn for both modes.
+            # Once the knob has caught up it stays 1:1. is_tracking is the
+            # same latch PICKUP uses, cleared by idx's setter on a page turn.
             if self.is_tracking[i]:
                 param.val = new_val
                 continue
-            # Catch up when the knob comes close -- but only if that does
-            # not move the value AGAINST the way the knob is turning. An
-            # unconditional latch means turning a knob down can jerk the
-            # value up by as much as the match window to meet it.
+            # Catch up when the knob comes close, but only if that does not
+            # move the value AGAINST the way the knob is turning. An
+            # unconditional latch lets turning a knob down jerk the value up
+            # by as much as the match window to meet it.
             if abs(new_val - param.val) < self.min_change * param.span and (
                 (new_val - param.val) * knob_delta >= 0
             ):

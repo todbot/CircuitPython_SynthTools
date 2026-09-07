@@ -20,16 +20,16 @@ patch = Patch(
     detune=1.004,
     # A filter has to exist before an envelope can sweep it. filt_f is the
     # resting cutoff, i.e. the FLOOR the envelope rises from and falls back
-    # to -- keep it low and let the envelope supply the brightness.
+    # to: keep it low and let the envelope supply the brightness.
     filt_type="LPF",
     filt_f=350,
     filt_q=1.6,
     # The envelope itself. fenv_amount is Hz ABOVE filt_f, and it defaults
-    # to 0, which switches the envelope off entirely -- it is the one field
+    # to 0, which switches the envelope off entirely: it is the one field
     # you cannot leave out.
     fenv_amount=4000,
     # 0.05s, not 0.02s. synthio updates blocks every 256 samples (~5.8ms at
-    # 44.1kHz), so a 0.02s attack is barely THREE steps -- you hear a click,
+    # 44.1kHz), so a 0.02s attack is barely THREE steps: you hear a click,
     # not a sweep. Anything you want to hear as movement needs to span a few
     # dozen updates.
     fenv_attack=0.05,
@@ -40,11 +40,11 @@ patch = Patch(
     filt_lfo_rate=0.4,
     filt_lfo_amount=0,
     # Velocity: both default to 0, meaning "velocity changes nothing".
-    # filt_vel is signed -- negative means hard playing closes the filter.
+    # filt_vel is signed: negative means hard playing closes the filter.
     filt_vel=0,
     fenv_vel=0.0,
     # The amp release must OUTLAST fenv_release, because the filter envelope
-    # only runs while the note is alive -- a short amp release silently cuts
+    # only runs while the note is alive: a short amp release silently cuts
     # the sweep short. But not by much: a long amp tail piles voices on top
     # of each other, and four overlapping sweeps at different points average
     # out into a constant brightness. 0.22 against fenv_release 0.22 keeps
@@ -60,7 +60,7 @@ riff = (36, 36, 48, 36, 43, 36, 46, 36)
 # any of this is audible:
 #   1. AHR holds at PEAK for as long as the key is down, so the only movement
 #      during the loud part of a note is the attack. The note has to be long
-#      enough to contain it -- a 0.10s note cannot show off a 0.25s attack, it
+#      enough to contain it: a 0.10s note cannot show off a 0.25s attack, it
 #      just sounds duller because the sweep never finishes.
 #   2. note lifetime / BEAT = how many voices overlap. At BEAT 0.16 with a 0.5s
 #      amp release that was 3.7 voices, each at a different point in its sweep,
@@ -85,40 +85,40 @@ def play(bars, label, velocity=110):
 while True:
     # 1. the envelope switched off: flat, dull, no movement at all
     synth.fenv_amount = 0
-    play(1, "fenv_amount=0     -- envelope off, static filter")
+    play(1, "fenv_amount=0    ; envelope off, static filter")
 
     # 2. switched on: the classic filter pluck
     synth.fenv_amount = 4000
-    play(1, "fenv_amount=4000  -- sweeps 350 -> 4350 Hz and back")
+    play(1, "fenv_amount=4000 ; sweeps 350 -> 4350 Hz and back")
 
     # 3. slower attack: the sweep becomes a swell rather than a pluck. This
-    #    only reads because the key is held 0.28s -- longer than the attack.
+    #    only reads because the key is held 0.28s: longer than the attack.
     #    Ask for a 0.25s swell on a 0.10s note and you just get a duller note.
     synth.fenv_attack = 0.25
-    play(1, "fenv_attack=0.25  -- slow rise, a swell not a pluck")
+    play(1, "fenv_attack=0.25 : slow rise, a swell not a pluck")
     synth.fenv_attack = 0.05
 
     # 4. longer release: the tail rings on after the key is up. The amp
-    #    release has to be raised WITH it -- the filter envelope stops dead
+    #    release has to be raised WITH it: the filter envelope stops dead
     #    when the voice is freed, so a 0.45s sweep under a 0.22s amp release
     #    is silently truncated to 0.22s and sounds like nothing changed.
     synth.release_time = 0.5
     synth.fenv_release = 0.45
-    play(1, "fenv_release=0.45 -- long tail (amp release raised to match)")
+    play(1, "fenv_release=0.45: long tail (amp release raised to match)")
     synth.fenv_release = 0.22
     synth.release_time = 0.22
 
-    # 5. curve: 1 is a straight line up and down. 2 is the analog feel --
+    # 5. curve: 1 is a straight line up and down. 2 is the analog feel:
     #    the rise snaps up and eases into the peak, and the release drops
     #    fast then tails off (15% of its height by halfway, vs 50% linear).
     synth.fenv_curve = 2
-    play(1, "fenv_curve=2      -- snappy rise, decaying tail on release")
+    play(1, "fenv_curve=2      (snappy rise, decaying tail on release")
     synth.fenv_curve = 3
-    play(1, "fenv_curve=3      -- more so: nearly a pluck")
+    play(1, "fenv_curve=3     ) more so: nearly a pluck")
     synth.fenv_curve = 1
 
     # 6. the cyclic LFO: the fourth modulation on the same cutoff. It SUMS
-    #    with the envelope, which is exactly why it needs its own moment --
+    #    with the envelope, which is exactly why it needs its own moment:
     #    with fenv_amount at 4000 the cutoff sits at 4-5kHz, and a 900Hz
     #    wobble up there is 0.39 of an octave on a 65Hz saw that has almost
     #    no energy left above 4kHz. Inaudible, despite being a big number.
@@ -126,26 +126,26 @@ while True:
     #    harmonics to remove.
     #
     #    So: envelope off, and put the LFO somewhere it can be heard. The
-    #    LFO is ADDITIVE -- filt_f is the floor and it opens 0..amount
+    #    LFO is ADDITIVE: filt_f is the floor and it opens 0..amount
     #    upward, it does not swing either side of filt_f. So to get a wide
     #    sweep, put the floor LOW and let the amount do the work.
     #    Note the rate too: 0.4Hz is a 2.5s cycle, slower than one note, so
     #    it drifts across the phrase instead of wobbling within a note.
     synth.fenv_amount = 0
     synth.filt_f = 120
-    synth.filt_lfo_amount = 1800  # 120..1920 Hz -- 4 octaves
+    synth.filt_lfo_amount = 1800  # 120..1920 Hz (4 octaves
     synth.filt_lfo_rate = 3.0  # ~1.5 cycles per note
-    play(1, "filt_lfo 1800 @ 3Hz -- envelope off, LFO alone: 120..1920 Hz")
+    play(1, "filt_lfo 1800 @ 3Hz) envelope off, LFO alone: 120..1920 Hz")
 
     #    ...and now both at once, with the envelope kept small enough that
     #    the LFO still reads on top of it. It reads less at the envelope's
-    #    peak than between notes -- that is the additive Hz bus being
+    #    peak than between notes: that is the additive Hz bus being
     #    honest, not a bug: the same Hz depth is fewer octaves higher up.
     synth.filt_f = 250
     synth.fenv_amount = 200
     synth.filt_lfo_amount = 1800
     synth.filt_lfo_rate = 5.0
-    play(1, "filt_lfo + fenv     -- the two summing on one cutoff")
+    play(1, "filt_lfo + fenv    : the two summing on one cutoff")
     synth.filt_lfo_amount = 0
     synth.filt_lfo_rate = 0.4
     synth.filt_f = 350
@@ -155,14 +155,14 @@ while True:
     #    NEW notes (at 0 no per-voice node is built at all), but once a voice
     #    has one, the knob keeps reaching it.
     synth.filt_vel = 2500
-    play(1, "filt_vel=2500     -- soft notes darker (every 4th is soft)")
+    play(1, "filt_vel=2500     (soft notes darker (every 4th is soft)")
     synth.filt_vel = -2500
-    play(1, "filt_vel=-2500    -- inverted: hard notes darker")
+    play(1, "filt_vel=-2500   ) inverted: hard notes darker")
     synth.filt_vel = 0
 
     # 8. velocity scales how far the envelope sweeps
     synth.fenv_vel = 1.0
-    play(1, "fenv_vel=1.0      -- soft notes sweep less far")
+    play(1, "fenv_vel=1.0     : soft notes sweep less far")
     synth.fenv_vel = 0.0
 
     # Nothing above was written to `patch`. To keep the current sound:

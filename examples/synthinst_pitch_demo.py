@@ -14,7 +14,7 @@
 # --- two kinds of note, and why ----------------------------------------
 # Vibrato and vib_delay only read on SUSTAINED notes: a 1.5s fade-in cannot
 # show itself on a 0.3s note, and at 5Hz you need most of a second just to
-# hear the wobble as a wobble. Pitch envelopes are the opposite -- they are
+# hear the wobble as a wobble. Pitch envelopes are the opposite: they are
 # attack gestures, so they want short repeated notes.
 # Hence hold() and play() below. Using one for the other's job is the
 # fastest way to conclude a working parameter does nothing.
@@ -36,7 +36,7 @@ patch = Patch(
     # each other, and that beating muddies exactly the small pitch movement
     # this demo is about.
     detune=1.0,
-    # Filter open and static -- fenv_amount 0 -- so nothing here is the
+    # Filter open and static (fenv_amount 0) so nothing here is the
     # filter moving. This demo is only about pitch.
     filt_type="LPF",
     filt_f=2600,
@@ -49,7 +49,7 @@ patch = Patch(
     # Pitch envelope: bends INTO the note from penv_amount to true pitch
     # over penv_time, then on note-off drifts OUT to penv_out_amount.
     # Both amounts default to 0 = off, and a voice with both off costs
-    # nothing -- it reuses the shared bend node.
+    # nothing: it reuses the shared bend node.
     penv_amount=0.0,
     penv_time=0.10,
     penv_out_amount=0.0,
@@ -70,7 +70,7 @@ GATE = 0.62
 
 
 def play(bars, label, velocity=110):
-    """Short repeated notes -- for attack gestures."""
+    """Short repeated notes, for attack gestures."""
     print(label)
     for _ in range(bars):
         for note in riff:
@@ -81,7 +81,7 @@ def play(bars, label, velocity=110):
 
 
 def hold(label, secs=3.0, note=52, velocity=110):
-    """One sustained note -- for vibrato, which needs time to be heard.
+    """One sustained note, for vibrato, which needs time to be heard.
 
     Starts from silence every time, which matters: the vibrato fade ramp
     retriggers on note_on only when no notes are held.
@@ -101,30 +101,30 @@ while True:
 
     # Depths here are deliberately WIDE. A tasteful 0.012 (~14 cents) is
     # what you would actually play, but it is too subtle to demonstrate
-    # anything -- and it makes vib_delay look broken, because fading from
+    # anything, and it makes vib_delay look broken, because fading from
     # nothing up to barely-anything is imperceptible. Everything below is
     # exaggerated so the parameter is unmistakable; dial it back by ~3x for
     # real use.
 
     # 1. reference point: no pitch modulation at all
     synth.vib_depth = 0.0
-    hold("vib_depth=0        -- dead straight, no movement")
+    hold("vib_depth=0       ; dead straight, no movement")
 
     # 2. obvious vibrato. 0.04 is ~48 cents either side, half a semitone
     synth.vib_depth = 0.04
-    hold("vib_depth=0.04     -- obvious vibrato at 5Hz (~48 cents)")
+    hold("vib_depth=0.04    : obvious vibrato at 5Hz (~48 cents)")
 
     # 3. rate only. Same depth, nearly twice the speed
     synth.vib_rate = 9.0
-    hold("vib_rate=9         -- same depth, much faster")
+    hold("vib_rate=9        : same depth, much faster")
     synth.vib_rate = 5.0
 
-    # 4. depth only. 0.10 is ~120 cents -- a whole semitone each way
+    # 4. depth only. 0.10 is ~120 cents (a whole semitone each way
     synth.vib_depth = 0.10
-    hold("vib_depth=0.10     -- a semitone each way, deliberately seasick")
+    hold("vib_depth=0.10    ) a semitone each way, deliberately seasick")
 
     # 5. THE DELAY, as an A/B at a depth you cannot miss. Vibrato fades in
-    #    over vib_delay seconds instead of arriving fully formed -- what a
+    #    over vib_delay seconds instead of arriving fully formed: what a
     #    singer or a string player does.
     #
     #    The fade is a rate on a SHARED ramp, retriggered by note_on only
@@ -133,16 +133,16 @@ while True:
     #    starts from silence, so each of these retriggers.
     synth.vib_depth = 0.06
     synth.vib_delay = 0.0
-    hold("vib_delay=0        -- A: vibrato present from the first instant", secs=2.5)
+    hold("vib_delay=0        (A: vibrato present from the first instant", secs=2.5)
     synth.vib_delay = 2.0
-    hold("vib_delay=2.0      -- B: dead straight for 2s, THEN it swells in", secs=5.0)
+    hold("vib_delay=2.0     ) B: dead straight for 2s, THEN it swells in", secs=5.0)
 
     # 6. and off again. Everything after this is the pitch ENVELOPE, which
-    #    is also pitch movement -- so the vibrato has to be gone or the two
+    #    is also pitch movement, so the vibrato has to be gone or the two
     #    are impossible to tell apart.
     synth.vib_delay = 0.0
     synth.vib_depth = 0.0
-    print("vibrato OFF        -- everything below is the pitch envelope")
+    print("vibrato OFF       : everything below is the pitch envelope")
     time.sleep(1.0)
 
     print()
@@ -150,25 +150,25 @@ while True:
 
     # 7. off, for comparison against what follows
     synth.penv_amount = 0.0
-    play(1, "penv_amount=0      -- notes start exactly on pitch")
+    play(1, "penv_amount=0     : notes start exactly on pitch")
 
     # 8. plucked-string sharpness: a struck string starts slightly sharp
-    #    and settles. 0.03 is ~36 cents, and 0.08s is ~14 block updates --
+    #    and settles. 0.03 is ~36 cents, and 0.08s is ~14 block updates:
     #    fast, but comfortably above the ~0.03s click threshold.
     synth.penv_amount = 0.03
     synth.penv_time = 0.08
-    play(1, "penv=+0.03 / 0.08s -- struck-string sharpness, settles quickly")
+    play(1, "penv=+0.03 / 0.08s: struck-string sharpness, settles quickly")
 
     # 9. negative = start FLAT and bend UP into pitch. Half an octave is a
     #    horn player scooping into the note, or a slide guitar.
     synth.penv_amount = -0.5
     synth.penv_time = 0.15
-    play(1, "penv=-0.50 / 0.15s -- scoops UP into pitch from a fifth below")
+    play(1, "penv=-0.50 / 0.15s: scoops UP into pitch from a fifth below")
 
     # 10. a full octave falling fast is not a bend any more, it is a drum.
     synth.penv_amount = 1.0
     synth.penv_time = 0.05
-    play(1, "penv=+1.00 / 0.05s -- octave drop: reads as a tom, not a pitch")
+    play(1, "penv=+1.00 / 0.05s: octave drop: reads as a tom, not a pitch")
     synth.penv_amount = 0.0
     synth.penv_time = 0.10
 
@@ -176,16 +176,16 @@ while True:
     print("=== pitch envelope: bending OUT on note-off ===")
 
     # 11. the release half. Needs the amp release to outlast penv_out_time
-    #     or the voice is freed mid-bend and the gesture is cut short --
+    #     or the voice is freed mid-bend and the gesture is cut short:
     #     the same trap fenv_release has.
     synth.release_time = 0.5
     synth.penv_out_amount = -0.4
     synth.penv_out_time = 0.35
-    play(1, "penv_out=-0.40     -- sags away downward as each note releases")
+    play(1, "penv_out=-0.40    : sags away downward as each note releases")
 
     # 12. upward on release instead
     synth.penv_out_amount = 0.35
-    play(1, "penv_out=+0.35     -- lifts away upward instead")
+    play(1, "penv_out=+0.35    : lifts away upward instead")
     synth.penv_out_amount = 0.0
     synth.release_time = 0.25
 
@@ -199,7 +199,7 @@ while True:
     synth.penv_time = 0.12
     synth.penv_out_amount = -0.3
     synth.release_time = 0.5
-    play(1, "vib + penv in + penv out -- all three on one bend graph")
+    play(1, "vib + penv in + penv out: all three on one bend graph")
     #     NOTE these are short notes, so the 0.8s vibrato fade barely gets
     #     going before each one ends. That is the point, not a fault:
     #     vib_delay is a sustained-note parameter.
@@ -207,7 +207,7 @@ while True:
     # 14. pitch_bend() is performance state, not patch state: one write
     #     into the shared block, so it moves every sounding voice at once.
     #     0.15 is about 180 cents, so nearly two semitones each way.
-    print("pitch_bend sweep   -- the wheel, on top of everything else")
+    print("pitch_bend sweep  : the wheel, on top of everything else")
     synth.note_on(52, velocity=110)
     STEPS = 80
     for i in range(STEPS):

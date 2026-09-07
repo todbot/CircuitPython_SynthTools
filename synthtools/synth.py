@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
 # SPDX-License-Identifier: MIT
 #
-# synth.py - Synth base class.
+# synth.py -- Synth base class.
 #
 # Owns: voice bookkeeping, patch load/save, live parameter updates.
 # Subclasses override _recompile() / _decompile() and _make_notes(), and
@@ -9,19 +9,12 @@
 #
 # Things to note:
 #
-# 1. THE PATCH IS NOT LIVE STATE. A Patch is inert JSON-able data. It is
-#    read once by _recompile() and then left alone -- turning a knob does
-#    NOT write to it. save_patch() is the only thing that pushes live
-#    state back, via _decompile(). So "the patch on disk" and "what I am
-#    hearing" are separate things, and reloading the patch reverts.
+# 1. THE PATCH IS NOT LIVE STATE. _recompile() reads it once; a knob turn
+#    never writes back. Only save_patch() does, so reloading is a revert.
 #
-# 2. PARAMETERS ARE BLOCKS, NOT NUMBERS. Anywhere synthio accepts a
-#    BlockInput, a shared synthio.Math can stand in for a float and stay
-#    writable. Every voice nests the same shared block, so one write
-#    reaches all of them inside the C renderer -- O(1) in polyphony,
-#    regardless of how many notes are sounding. Doing that arithmetic in
-#    the block graph rather than in Python is also what lets a knob reach
-#    a note that is ALREADY playing.
+# 2. PARAMETERS ARE BLOCKS, NOT NUMBERS. Every voice nests the same shared
+#    synthio.Math, so one write reaches all of them inside the C renderer:
+#    O(1) in polyphony, and it reaches notes that are already playing.
 #
 # Live-parameter cost, fastest to slowest:
 #   1. shared block write  - one assignment. O(1). filt_f, filt_q,
@@ -62,7 +55,7 @@ class Synth:
 
     Every parameter is a plain property (``synth.filt_f = 2000``), each
     backed by a shared synthio block so one write reaches every sounding
-    voice in O(1) regardless of polyphony -- see the module docstring
+    voice in O(1) regardless of polyphony: see the module docstring
     above for the full cost model. set_param(name, val) is a string
     front-end onto the same properties, for MIDI CC / UI code.
 
@@ -90,8 +83,8 @@ class Synth:
     #:     lead.mono = True
     #:     lead.glide_time = 0.08
     #:
-    #: Glide is defined as meaningless in poly -- one shared bend would drag
-    #: every sounding voice -- so it is only applied while this is set.
+    #: Glide is defined as meaningless in poly (one shared bend would drag
+    #: every sounding voice) so it is only applied while this is set.
     #:
     #: 'mono' is a synth STYLE's default. ``Patch.mono`` overrides it per patch
     #: (``None`` there means "leave the style's default alone"), and
@@ -103,14 +96,10 @@ class Synth:
     #: accident.
     mono = False
 
-    # The cutoff bus can be driven below zero -- a downward fenv_amount,
-    # a negative filt_vel, a big filt_lfo_amount.  So it is clamped, in one
-    # MID block, since the middle of three values is exactly a clamp.
-    #
-    # A negative Biquad.frequency does NOT raise or crash, so this is defensive
-    # and can prevent some glitching: what such a filter *sounds* like is
-    # undefined. A ownward sweep hitting 0 Hz is an ordinary patch, so it
-    # should work. Cost is one shared block plus one per modulated voice.
+    # A downward fenv_amount, a negative filt_vel or a big filt_lfo_amount
+    # can each drive the cutoff bus below zero, so it is clamped in one MID
+    # block. Defensive rather than required: a negative Biquad.frequency
+    # does NOT raise, but what such a filter *sounds* like is undefined.
     FILT_F_MIN = 20.0
     FILT_F_MAX = 20000.0
 
@@ -137,35 +126,29 @@ class Synth:
         #
         #   SHARED:  bend = SUM(vib_lfo, bend_blk)
         #                     vib_lfo.scale = PRODUCT(vib_depth, vib_fade)
-        #   VOICE:   note.bend = SUM(bend, penv)   -- only when a pitch
-        #                                             envelope exists
+        #   VOICE:   note.bend = SUM(bend, penv)   only with a pitch envelope
         #
         # The vibrato fade-in lives INSIDE the LFO's scale rather than on
         # the bend path, because LFO.scale is a BlockInput. That keeps the
         # whole of vib_delay in the shared half: nothing per voice, and
         # vib_depth stays one write into its own block.
         self._vib_depth_blk = scalar_block(0.0)
-        # A one-shot 0 -> 1 ramp. rate = 1/vib_delay, so vib_delay = 0 needs
-        # no special case at all -- the ramp just finishes in a millisecond.
-        # The graph stays static, which is what the identity rule wants.
+        # A one-shot 0 -> 1 ramp at rate 1/vib_delay, so vib_delay = 0 needs
+        # no special case: the ramp just finishes in a millisecond and the
+        # graph stays static, which is what the identity rule wants.
         self._vib_fade = synthio.LFO(waveform=ramp_wave(), rate=1000.0, once=True)
         self._vib_lfo = synthio.LFO(rate=5.0, scale=product(self._vib_depth_blk, self._vib_fade))
         self._bend_blk = scalar_block(0.0)
         # --- glide, the third input of the bend SUM ------------------
         # Portamento needs a per-voice pitch offset ONLY when there are
-        # several voices. In mono there is one, so the glide is shared
-        # like everything else here and just occupies the third input
-        # sum3() already takes and nothing else was using.
+        # several voices; in mono there is one, so it is shared like
+        # everything else and occupies the spare third input of sum3().
         #
         # It is a POSITION lerp: the bend runs from the previous note's
         # pitch to zero while the Note itself is created at the new pitch.
-        # Aimed the other way (start at the new note, bend toward the old)
-        # successive glides would compound.
+        # Aimed the other way, successive glides would compound.
         #
-        # In poly mode nothing ever writes _glide.a, so this sits at 0.0
-        # and is inert -- two objects, no arithmetic. And because _bend is
-        # rooted in synthesizer.blocks below, the LFO ticks without being
-        # rooted itself, exactly like _vib_fade inside _vib_lfo.scale.
+        # In poly nothing writes _glide.a, so this sits at 0.0 and is inert.
         self._glide_pos = synthio.LFO(waveform=ramp_wave(), rate=1000.0, once=True)
         self._glide = constrained_lerp(0.0, 0.0, self._glide_pos)
         self._glide_time = 0.0
@@ -180,51 +163,41 @@ class Synth:
         #                          fenv   = AHREnvelope.make(gain)
         #                            gain = LERP(1, vel/127, fenv_vel)
         #
-        # SUM takes three inputs, so base+LFO, envelope and velocity all
-        # land in ONE per-voice node. Every knob in there is a shared block
-        # nested inside it, so each stays a single write no matter how many
-        # voices are sounding -- including voices already in release.
+        # SUM takes three inputs, so base+LFO, envelope and velocity all land
+        # in ONE per-voice node. Every knob in there is a shared block nested
+        # inside it, so each stays a single write however many voices are
+        # sounding, including voices already in release.
         #
-        # Every one of the three modulations is ADDITIVE and one-sided:
-        # filt_f is the floor and they open upward from it. synthio's LFO
-        # outputs `waveform[idx] * scale + offset` and its default waveform
-        # is a triangle centred on zero, so scale ALONE would swing
-        # +/-amount about filt_f and push the bottom half into the
-        # FILT_F_MIN clamp. Setting scale and offset both to amount/2 shifts
-        # the whole swing up into 0..amount -- see filt_lfo_amount below.
+        # All three modulations are ADDITIVE and one-sided: filt_f is the
+        # floor and they open upward from it. See filt_lfo_amount below for
+        # how the LFO is shifted to make that true.
         self._filt_lfo = synthio.LFO(rate=0.5, scale=0.0, offset=0.0)
         self._filt_sum = sum3(self._filt_f_blk, self._filt_lfo)
         self._filt_base = clamp(self._filt_sum, self.FILT_F_MIN, self.FILT_F_MAX)
         # Anything not reachable from a sounding Note has to be rooted here
-        # or synthio never updates it -- and that applies to Math blocks,
-        # not just LFOs.
+        # or synthio never updates it, and that applies to Math blocks, not
+        # just LFOs. Unattached LFOs do not advance, so vibrato and the
+        # filter sweep would jump phase at every note-on.
         #
-        # The LFOs are the obvious case: unattached, they do not advance, so
-        # vibrato and the filter sweep would jump phase at every note-on.
-        #
-        # `_filt_base` and `_bend` are the non-obvious one. Both are only
-        # reachable through a voice, so with nothing sounding they freeze --
-        # and on a freshly built Synth they have never been evaluated at
-        # all. Measured on hardware: the first note-on after construction
-        # read its cutoff as 0.0 Hz (a filter slammed shut for a block, i.e.
-        # a click), and later notes after a silence read a stale cutoff
-        # frozen at wherever the LFO was when the last voice died. Rooting
-        # them here makes the shared half of the graph always-live, so a
-        # note-on inherits a correct cutoff and bend on its very first
-        # update. Costs two list entries.
+        # `_filt_base` and `_bend` are the non-obvious ones: reachable only
+        # through a voice, so they freeze with nothing sounding, and on a
+        # fresh Synth have never been evaluated at all. Measured on hardware,
+        # the first note-on after construction read its cutoff as 0.0 Hz (a
+        # click), and notes after a silence read a cutoff frozen wherever the
+        # LFO was when the last voice died.
         synthesizer.blocks.append(self._vib_lfo)
         synthesizer.blocks.append(self._filt_lfo)
         synthesizer.blocks.append(self._filt_base)
         synthesizer.blocks.append(self._bend)
         # The envelope is a modulation SOURCE: it produces 0 -> amount and
-        # knows nothing about filters. Created once and never replaced --
-        # sounding voices hold references to its buffer and blocks.
+        # knows nothing about filters. Created once and never replaced,
+        # since sounding voices hold references to its buffer and blocks.
         self._fenv = AHREnvelope()
         self._fenvs = {}  # midi_note -> env block, for held notes
         # The pitch envelope is the SAME class, falling instead of rising:
-        # it starts at penv_amount and settles to 0 (true pitch), then on
-        # note-off drifts on to penv_out_amount. Its own instance, so its
-        # shape buffer and rates are independent of the filter's.
+        # penv_amount settling to 0 (true pitch), then on note-off drifting
+        # on to penv_out_amount. Its own instance, so its shape buffer and
+        # rates are independent of the filter's.
         self._penv = AHREnvelope(falling=True)
         self._penvs = {}  # midi_note -> pitch env block
         # "voice under construction" temporaries, set by note_on around the
@@ -259,8 +232,7 @@ class Synth:
         p = self.patch
         # type(self).mono, NOT False: styles that are inherently monophonic
         # (BasslineSynth, SwarmSynth) declare it as a class attribute, and a
-        # patch that simply does not mention mono must not de-mono them.
-        # Assigning here shadows the class attribute with an instance one.
+        # patch that does not mention mono must not de-mono them.
         want_mono = getattr(p, "mono", None)
         self.mono = type(self).mono if want_mono is None else want_mono
         self._filt_type = p.filt_type
@@ -324,7 +296,7 @@ class Synth:
 
             synth.save_patch().save("/patch.json")
 
-        Mutates and returns the patch that was loaded -- it is the same
+        Mutates and returns the patch that was loaded; it is the same
         object, not a copy.
         """
         self._decompile()
@@ -339,7 +311,7 @@ class Synth:
     def _voice_fenv_gain(self, velocity):
         """This voice's envelope depth scale.
 
-        Plain 1.0 when fenv_vel is off -- there is no arithmetic to avoid in
+        Plain 1.0 when fenv_vel is off: there is no arithmetic to avoid in
         that case, and it lets AHREnvelope skip a block. Otherwise a LERP
         block, which is exactly `1 - fenv_vel + fenv_vel * vel_norm` but
         with fenv_vel still LIVE inside it, so the knob keeps reaching the
@@ -356,7 +328,7 @@ class Synth:
         multiplied by a shared block that stays LIVE inside the graph, so
         the knob keeps reaching the voice after it has been pressed. They
         are folded together here so the cutoff SUM keeps its existing three
-        inputs (base, envelope, offsets) instead of needing a fourth --
+        inputs (base, envelope, offsets) instead of needing a fourth,
         which is also what lets BasslineSynth keep re-aiming one shared node.
 
         Returns None when neither is in play, so the ordinary patch
@@ -369,17 +341,16 @@ class Synth:
             vel_hz = product(self._filt_vel_blk, velocity / 127.0)
         trk_hz = None
         if self._filt_track_blk.a:
-            # cutoff += filt_f * filt_track * (f/f_ref - 1), so at
-            # filt_track 1.0 the cutoff is exactly filt_f * f/f_ref -- full
-            # tracking, the filter doubling per octave. filt_f is nested
-            # rather than read, so BOTH knobs stay live on a sounding voice.
-            # A ratio of two midi_to_hz values, not 2**(n/12): the tuning
-            # reference cancels, and it avoids ** entirely. That is not just
-            # tidiness -- real synthio's midi_to_hz is NOT the exact formula
-            # the test stub uses (measured on rp2040: midi_to_hz(69) reads
-            # 439.9991, not 440.0), but its octave ratio is exactly
-            # 2.000000000, so a ratio is right on device and in the stubs
-            # while an absolute-Hz formula would drift between them.
+            # cutoff += filt_f * filt_track * (f/f_ref - 1), so filt_track
+            # 1.0 gives filt_f * f/f_ref: full tracking, the filter doubling
+            # per octave. filt_f is nested rather than read, so BOTH knobs
+            # stay live on a sounding voice.
+            #
+            # A ratio of two midi_to_hz values, not 2**(n/12). Real synthio's
+            # midi_to_hz is NOT the exact formula the test stub uses
+            # (measured on rp2040: midi_to_hz(69) reads 439.9991, not 440.0),
+            # but its octave ratio is exactly 2.000000000, so a ratio is
+            # right both on device and under the stubs.
             ratio = synthio.midi_to_hz(midi_note) / self._track_ref_hz - 1.0
             trk_hz = product(self._filt_f_blk, self._filt_track_blk, ratio)
         if vel_hz is None:
@@ -403,14 +374,11 @@ class Synth:
             return self._filt_base  # already clamped
         # `is None` rather than truthiness throughout: these are synthio
         # blocks, and whether one is falsy is not ours to assume.
-        # Clamped again here, not just on the shared base: a downward
-        # fenv_amount (a normal patch) or a negative filt_vel can drive
-        # this sum below zero all on its own.
+        #
         # Clamped again here, not just on the shared base: a downward
         # fenv_amount (a normal patch), a negative filt_vel, or a large
         # negative filt_track on a high note can each drive this sum below
-        # zero on their own. That is what the clamp is for -- no extra
-        # guarding needed anywhere else.
+        # zero on their own.
         return clamp(
             sum3(
                 self._filt_base,
@@ -460,7 +428,7 @@ class Synth:
         """Press a note.
 
         ``glide`` overrides glide_time in seconds for this note only, and
-        only matters in mono -- a per-step slide flag needs that, because
+        only matters in mono: a per-step slide flag needs that, because
         writing glide_time itself would leak into the patch.
         """
         if self.mono:
@@ -472,24 +440,16 @@ class Synth:
             #
             # They are released but still audible, and they share the bend
             # graph _aim_glide is about to point at the NEW note's starting
-            # pitch -- which is offset by the interval being glided. So the
-            # old tail gets yanked there too: stepping 43 -> 46 with a 0.35s
-            # glide dropped the still-sounding 43 to 81.7 Hz, three semitones
-            # BELOW where it had been, before climbing back (measured on
-            # rp2040). With a slow attack on the new note, that tail is the
-            # loudest thing present, so the step sounds like it goes DOWN.
+            # pitch, which is offset by the interval being glided. So the old
+            # tail gets yanked there too. Measured on rp2040: stepping
+            # 43 -> 46 with a 0.35s glide dropped the still-sounding 43 to
+            # 81.7 Hz, three semitones BELOW where it had been, and with a
+            # slow attack that tail is the loudest thing present, so the step
+            # sounds like it goes DOWN.
             #
-            # A real monosynth cannot do this: one oscillator, one envelope,
-            # retriggered -- there is no previous note to drag. The stale
-            # tail is an artifact of using synthio's polyphonic Note model
-            # for a mono voice, so freezing is the faithful behaviour.
-            #
-            # Reassigning Note.bend to a plain float after press works on
-            # CircuitPython (verified). The trade is that a frozen tail no
-            # longer receives vibrato, the pitch wheel or a pitch-envelope
-            # release drift -- acceptable on a fading release, and it only
-            # happens when portamento is actually on: with glide 0 nothing
-            # is collected above and nothing is frozen.
+            # The trade is that a frozen tail no longer receives vibrato, the
+            # pitch wheel or a pitch-envelope release drift. Acceptable on a
+            # fading release, and it only happens when portamento is on.
             for n in stolen:
                 b = n.bend
                 n.bend = getattr(b, "value", b)
@@ -533,19 +493,17 @@ class Synth:
             if penv is not None:
                 self._penv.start_release(penv)
             # Freeze the bend on the way out, for the same reason note_on()
-            # freezes the notes it steals -- but this covers the case that
-            # one cannot see. Releasing pops the note from self.voices while
-            # it is still audible, so a later glide, aiming the SHARED bend
-            # at the next note's starting pitch, drags this tail along with
-            # it. Measured on rp2040: playing 48, releasing it, then gliding
-            # to 36 threw the still-ringing 48 up to midi 57.9 before it
-            # slid back -- a pitch above both notes, and the loudest thing
-            # present if the new note has any attack at all.
+            # freezes the notes it steals, but covering the case note_on()
+            # structurally cannot see: releasing pops the note from
+            # self.voices while it is still audible, so a later glide drags
+            # this tail along. Measured on rp2040, playing 48, releasing it,
+            # then gliding to 36 threw the still-ringing 48 up to midi 57.9,
+            # above BOTH notes, before it slid back.
             #
-            # Guarded on glide_time so a tail keeps its vibrato when there
-            # is no portamento to drag it. note_on()'s own freeze still
-            # matters and is not redundant: it uses the per-note `glide`
-            # override, which can be non-zero while glide_time is 0.
+            # Guarded on glide_time so a tail keeps its vibrato when there is
+            # no portamento to drag it. note_on()'s freeze is still not
+            # redundant: it uses the per-note `glide` override, which can be
+            # non-zero while glide_time is 0.
             if self.mono and self._glide_time:
                 for n in notes:
                     b = n.bend
@@ -568,7 +526,7 @@ class Synth:
 
         Called from note_on() in mono only. Note the previous note is
         still releasing at this point and shares this bend, so a glide
-        drags its tail along too -- inherent to a shared bend, and only
+        drags its tail along too: inherent to a shared bend, and only
         audible with a long amp release and a long glide together.
         """
         prev = self._last_midi
@@ -581,7 +539,7 @@ class Synth:
             # Plus whatever glide is still in flight, so interrupting one
             # mid-slide starts the next from where the pitch actually IS.
             # Same structural continuity as AHREnvelope.start_release()'s
-            # `env.a = env.value` -- there is no rate to recompute.
+            # `env.a = env.value`: there is no rate to recompute.
             self._glide.a = (prev - midi_note) / 12.0 + self._glide.value
         self._glide_pos.retrigger()
 
@@ -605,8 +563,8 @@ class Synth:
         overdamped and the knob does nothing audible; past 6 it is
         squealing and close to self-oscillating, so the top of a wider
         range is travel nobody wants. Size UI ranges to that, and
-        remember that anything adding to resonance -- ``BasslineSynth``'s
-        ``accent_q``, which lands on the same block's spare input -- eats
+        remember that anything adding to resonance (``BasslineSynth``'s
+        ``accent_q``, which lands on the same block's spare input) eats
         into the same ceiling.
         """
         return self._filt_q_blk.a
@@ -625,13 +583,12 @@ class Synth:
         self._filt_mode = FILTER_MODES.get(v)  # applies at next note-on
 
     # --- amp envelope ---------------------------------------------------
-    # synthio.Envelope is immutable: every ADSR edit means a new object.
-    # That is one small allocation per knob movement, so deadband inputs.
+    # synthio.Envelope is immutable: every ADSR edit means a new object, one
+    # small allocation per knob movement, so deadband the inputs.
     # push_env controls whether *sounding* notes get the new envelope:
-    #   True  - turning release while holding a chord affects that release
-    #           (what a player expects). Changing sustain_level mid-note
-    #           steps the level rather than slewing.
-    #   False - edits only apply from the next note-on. Safest.
+    #   True  - turning release while holding a chord affects that release,
+    #           which is what a player expects
+    #   False - edits apply from the next note-on only. Safest.
     push_env = True
 
     def _rebuild_env(self):
@@ -725,7 +682,7 @@ class Synth:
     def glide_time(self):
         """Seconds to slide from the previous note into a new one.
 
-        Portamento. Only applies while ``mono`` is set -- one shared bend
+        Portamento. Only applies while ``mono`` is set: one shared bend
         would drag every sounding voice otherwise. Only a rate on the
         shared ramp, so it is cheap on a knob, and it takes effect at the
         next note-on rather than mid-glide.
@@ -738,11 +695,11 @@ class Synth:
         self._glide_pos.rate = 1.0 / max(v, 0.001)
 
     # --- pitch envelope --------------------------------------------------
-    # Thin delegates onto self._penv, which is an AHREnvelope running
-    # falling: penv_amount -> 0 on the way in, then on to penv_out_amount
-    # on the way out. Amounts are bend units, 1.0 = one octave.
-    # Like fenv_amount, raising either amount from 0 only affects NEW notes,
-    # because at 0 no per-voice node is built to write into.
+    # Thin delegates onto self._penv, an AHREnvelope running falling:
+    # penv_amount -> 0 on the way in, then on to penv_out_amount on the way
+    # out. Amounts are bend units, 1.0 = one octave. Like fenv_amount,
+    # raising either from 0 only affects NEW notes, because at 0 no
+    # per-voice node is built to write into.
 
     @property
     def penv_amount(self):
@@ -798,7 +755,7 @@ class Synth:
         with lmin fixed at 0.
 
         Doing it this way rather than with a custom unipolar waveform keeps
-        the LFO on synthio's internal 16-bit resolution -- a hand-built
+        the LFO on synthio's internal 16-bit resolution: a hand-built
         64-sample buffer would be measurably steppier.
 
         Two writes, but both land on the ONE shared LFO, so this is still
@@ -821,10 +778,9 @@ class Synth:
 
     @fenv_amount.setter
     def fenv_amount(self, v):
-        # one write into the shared block; reaches every voice, including
-        # ones already in release. Note: if amount was 0 at note-on no
-        # envelope was built for that voice, so raising it from 0 only
-        # affects new notes.
+        # one write into the shared block, release included. If amount was 0
+        # at note-on no envelope was built for that voice, so raising it from
+        # 0 only affects new notes.
         self._fenv.amount = v
 
     @property
@@ -849,9 +805,9 @@ class Synth:
 
     @fenv_curve.setter
     def fenv_curve(self, v):
-        # the shape is rewritten in place, so sounding voices -- including
-        # ones already in release -- morph immediately. O(1), but it does
-        # allocate temporaries: this is a switch, not a knob.
+        # the shape is rewritten in place, so sounding voices morph
+        # immediately, release included. O(1), but it allocates temporaries:
+        # a switch, not a knob.
         self._fenv.curve = v
 
     # --- velocity -------------------------------------------------------
@@ -871,7 +827,7 @@ class Synth:
     def filt_track(self):
         """Keyboard tracking: how much the cutoff follows the played pitch.
 
-        1.0 is full tracking -- the cutoff doubles per octave, so the filter
+        1.0 is full tracking: the cutoff doubles per octave, so the filter
         stays at a fixed point in the harmonic series and every note has the
         same timbre. 0 is off. Negative tracks INVERSELY, closing the filter
         as you play higher, which is what the Swarmatron's tracking knob does
@@ -880,7 +836,7 @@ class Synth:
         Pivots at ``FILT_TRACK_REF`` (MIDI 60): that note's cutoff is
         ``filt_f`` no matter what this is set to.
 
-        One write, and it reaches every sounding voice -- it is nested LIVE
+        One write, and it reaches every sounding voice: it is nested LIVE
         inside each voice's tracking node alongside ``filt_f``, so both keep
         moving a note that is already playing. Only turning it on *from
         zero* is next-note-on, the same caveat ``filt_vel`` has: at zero no

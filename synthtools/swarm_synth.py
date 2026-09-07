@@ -1,49 +1,34 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
 # SPDX-License-Identifier: MIT
 #
-# swarm_synth.py - a massed-oscillator drone voice in the style of the
+# swarm_synth.py -- a massed-oscillator drone voice in the style of the
 # Dewanatron Swarmatron: N oscillators on one pitch, fanned apart by a
 # single "swarm" control.
 #
-# What the real Swarmotron does:
-#
-#   - EIGHT oscillators, switchable between sine and sawtooth, played
-#     MONOPHONICALLY from a pitch ribbon (hence mono = True below, and the
-#     `wave` field being an ordinary waves.py name).
-#   - A second ribbon plus a rotary knob drive the "swarm" (Dewanatron also
-#     call it "span"): it takes the eight from a few cents apart out to
-#     "a wide chord of equidistant pitches spread over the entire
-#     spectrum". EQUIDISTANT is the operative word -- hence the evenly
-#     spaced fan in _set_fan(), and why swarm_spread is deliberately not
-#     clamped to a narrow chorus range: 0.01 is +/-12 cents, 1.0 is a
-#     two-octave equidistant cluster, and both are the instrument.
-#   - "Taffy pulling" -- working the swarm ribbon and the pitch ribbon
-#     together -- is the signature gesture, which is the whole reason the
-#     spread here is a live shared block rather than a per-Note frequency.
+# The real instrument is eight oscillators, sine or sawtooth, played
+# MONOPHONICALLY from a pitch ribbon. A second ribbon and a knob drive the
+# "swarm" from a few cents apart out to "a wide chord of equidistant pitches
+# spread over the entire spectrum". EQUIDISTANT is the operative word: hence
+# the evenly spaced fan in _set_fan(), and why swarm_spread is not clamped
+# to a narrow chorus range. "Taffy pulling", working both ribbons together,
+# is the signature gesture, and the reason the spread here is a live shared
+# block rather than a per-Note frequency.
 #
 # References:
 #   https://en.wikipedia.org/wiki/Swarmatron
 #   https://www.soundonsound.com/reviews/dewanatron-swarmatron
 #   http://dewanatron.com/instruments.php?page=swarmatron
 #
-# The swarm_drift parameter attempts to model the  drift of the
-# eight analog oscillators in the real Swarmotron.
-# Without it, a fixed-ratio digital fan sounds like a chorus pedal.
-# Set it to 0 for perfectly stable tuning.
-#
-# Swarmotron emulation could perhaps be made with a SubtractiveSynth
-# playing 8 notes, but, doing that would look like:
+# Building this from a SubtractiveSynth playing 8 notes would mean finding
+# and rewriting every sounding Note on every sweep, since
+# synthio.Note.frequency is a plain float:
 #
 #     for notes in self.voices.values():          # subtractive_synth.py
 #         notes[1].frequency = notes[0].frequency * v
 #
-# since synthio.Note.frequency is a plain float. Moving the detune means
-# finding and rewriting every sounding Note, an expensive operation.
-#
-# So here we use note.bend, a BlockInput. So the whole fan hangs off ONE
-# shared scalar block and a swarm sweep is a single write that reaches every
-# sounding oscillator, O(1) in polyphony -- the same property every other
-# knob in this library has:
+# note.bend is a BlockInput instead, so the whole fan hangs off ONE shared
+# scalar block and a sweep is a single write reaching every sounding
+# oscillator, O(1) in polyphony:
 #
 #   SHARED (built once in __init__, one set per synth):
 #     fan[i] = SUM(PRODUCT(swarm_blk, k_i), drift_lfo[i])
@@ -53,12 +38,11 @@
 #   PER VOICE (one per oscillator, built at note_on):
 #     note[i].bend = SUM(voice_bend, fan[i])
 #
-# Bend units are octaves, matching vib_depth and penv_amount: swarm_spread
-# 0.01 puts the outermost pair at +/-12 cents.
-#
-# The drift LFOs run at mutually non-harmonic slow rates with staggered
-# phase offsets so they never line up, and synthio's default LFO waveform
-# (a zero-centred triangle) is already the right shape: bipolar, +/-swarm_drift.
+# swarm_drift models the real instrument's analog oscillator drift; without
+# it a fixed-ratio digital fan sounds like a chorus pedal. Those LFOs run at
+# mutually non-harmonic slow rates with staggered phase so they never line
+# up, and synthio's default zero-centred triangle is already the right
+# bipolar shape.
 #
 
 import synthio
@@ -73,7 +57,7 @@ class SwarmSynth(Synth):
     pitch, fanned apart in a symmetric spread and drifting independently.
 
     Monophonic by default (``mono = True``), like the instrument it is named
-    after -- see the module docstring for the polyphony arithmetic. Set
+    after: see the module docstring for the polyphony arithmetic. Set
     ``glide_time`` for the ribbon-ish slide between notes.
 
     Patch fields, on top of the shared ``Synth`` ones:
@@ -93,7 +77,7 @@ class SwarmSynth(Synth):
 
     ``swarm_spread`` and ``swarm_drift`` are each ONE write into a shared
     block and reach every sounding oscillator, so sweeping the swarm under
-    a held drone -- the whole point of the instrument -- works at any
+    a held drone (the whole point of the instrument) works at any
     polyphony. ``swarm_count`` changes what the NEXT note-on builds; voices
     already sounding keep the oscillators they were pressed with.
     """
@@ -104,7 +88,7 @@ class SwarmSynth(Synth):
 
     _PARAMS = Synth._PARAMS + ("wave", "swarm_count", "swarm_spread", "swarm_drift")
 
-    #: One voice at a time, like the real instrument -- and 8 oscillators a
+    #: One voice at a time, like the real instrument, and 8 oscillators a
     #: key means poly runs out of synthio's 24-note budget at three keys.
     mono = True
 
@@ -115,16 +99,15 @@ class SwarmSynth(Synth):
 
     def __init__(self, synthesizer, patch=None):
         # The shared fan is built HERE, before super().__init__() runs its
-        # load_patch() -> _recompile(): it must exist by then, and none of
-        # it may ever be replaced -- sounding voices hold references.
+        # load_patch() -> _recompile(): it must exist by then, and none of it
+        # may ever be replaced, since sounding voices hold references.
         self._swarm_blk = scalar_block(0.0)
         self._drift_blk = scalar_block(0.0)
         self._drift_lfos = []
         self._fan = []
         for i in range(self.MAX_OSCS):
             # Slow, mutually non-harmonic rates plus a staggered phase so the
-            # oscillators never wander in step. Default waveform (a
-            # zero-centred triangle) is what makes this bipolar.
+            # oscillators never wander in step.
             lfo = synthio.LFO(
                 rate=0.07 + 0.031 * i,
                 scale=self._drift_blk,
@@ -135,26 +118,18 @@ class SwarmSynth(Synth):
             # _set_fan(); the block itself is never replaced.
             self._fan.append(sum3(product(self._swarm_blk, 0.0), lfo))
         self._set_fan(self._swarm_count)
-        # The fan Math MUST be rooted; everything nested inside it must NOT be.
+        # The fan Math MUST be rooted; everything nested inside it need not
+        # be, so this is one append per oscillator, not two.
         #
-        #   an UNROOTED fan reads 0.0 with nothing sounding, and still reads
-        #   0.0 at the first note-on that uses it -- so the whole swarm
-        #   would sound in unison for one block (5.8ms) before snapping
-        #   apart. Rooted, it reads the correct spread both times. Same
-        #   class of bug as the 0.0 Hz first-note cutoff in synth.py.
+        # An UNROOTED fan reads 0.0 with nothing sounding AND at the first
+        # note-on that uses it, so the swarm would sound in unison for one
+        # 5.8ms block before snapping apart. Same class of bug as the 0.0 Hz
+        # first-note cutoff in synth.py.
         #
-        #   a continuous LFO nested inside a rooted Math DOES tick -- it
-        #   does not need rooting of its own. Measured: rooted, nested-only
-        #   and rooted+nested LFOs all advanced over 0.7s at 2 Hz; only a
-        #   genuinely orphaned one (reachable from nothing) stayed frozen.
-        #   So CLAUDE.md's "an unattached LFO never ticks" means UNATTACHED,
-        #   not merely un-rooted. (`_filt_lfo` in synth.py is rooted despite
-        #   also being nested in the rooted `_filt_base`; by this
-        #   measurement that is redundant, not required -- left alone here,
-        #   but do not copy it as a pattern.)
-        #
-        # So one append per oscillator, not two: the drift LFO and both
-        # scalar blocks ride along inside the fan.
+        # A continuous LFO nested inside a rooted Math does tick. Measured:
+        # rooted, nested-only and rooted+nested LFOs all advanced over 0.7s
+        # at 2 Hz; only a genuinely orphaned one stayed frozen. "An
+        # unattached LFO never ticks" means UNATTACHED, not un-rooted.
         for f in self._fan:
             synthesizer.blocks.append(f)
         super().__init__(synthesizer, patch)
@@ -167,7 +142,7 @@ class SwarmSynth(Synth):
         the existing PRODUCT blocks' spare .b input rather than rebuilding
         them, so block identity survives a count change and voices already
         sounding are never orphaned. Slots above `count` keep whatever
-        coefficient they last held -- harmless, since nothing reads them
+        coefficient they last held: harmless, since nothing reads them
         until a note-on uses that slot again, which rewrites it first.
         """
         for i in range(count):
@@ -206,13 +181,10 @@ class SwarmSynth(Synth):
         notes = []
         for i in range(self._swarm_count):
             # The per-Note SUM is built even when swarm_spread is 0. The
-            # tempting _voice_cutoff()-style "allocate nothing when it's
-            # off" shortcut would make the swarm knob next-note-on only when
-            # starting from zero -- and sweeping the spread up from nothing
-            # under a held drone is exactly what this instrument is for.
-            #
-            # (A per-oscillator `panning` spread would go here too, but
-            # examples/synth_setup.py is a mono rig, so it is not built.)
+            # tempting _voice_cutoff()-style "allocate nothing when it's off"
+            # shortcut would make the swarm knob next-note-on only from zero,
+            # and sweeping the spread up from nothing under a held drone is
+            # exactly what this instrument is for.
             # fmt: off
             notes.append(synthio.Note(f, waveform=random_phase_wave(self._wave_name),
                                       envelope=self._env, amplitude=amp,
@@ -239,7 +211,7 @@ class SwarmSynth(Synth):
     def swarm_count(self):
         """Oscillators per key, 1..MAX_OSCS.
 
-        Genuinely structural -- it changes how many Notes a key builds -- so
+        Genuinely structural (it changes how many Notes a key builds) so
         it applies at the NEXT note-on; voices already sounding keep theirs.
         Nothing downstream needs re-wiring for that, which is why it is a
         safe set_param() name.

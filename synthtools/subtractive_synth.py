@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
 # SPDX-License-Identifier: MIT
 #
-# subtractive.py - classic two-oscillator subtractive synth.
+# subtractive.py -- classic two-oscillator subtractive synth.
 #
 # Osc2 is a detuned copy of osc1; detune=1.0 collapses to a single osc.
 
@@ -47,14 +47,12 @@ class SubtractiveSynth(Synth):
         amp = velocity / 127
         detuned = self._detune and self._detune != 1.0
         # Each oscillator gets its OWN random start point in the wave's
-        # cycle, rerolled every note-on -- see waves.random_phase_wave().
-        # Rebalanced only when osc2 exists: undetuned (single-osc) patches
-        # stay at full amp, unchanged. When osc2 is present, split so the
-        # two sum to amp * 1.0 instead of amp * 1.6 -- the old worst case
-        # (both oscillators in phase, still possible now that phase is
-        # random) could exceed int16 range on its own, before the filter
-        # even sees it. 0.625/0.375 keeps osc2 at 60% of osc1's level, same
-        # blend as before, just scaled so the ceiling is 1.0 instead of 1.6.
+        # cycle, rerolled every note-on; see waves.random_phase_wave().
+        # Rebalanced only when osc2 exists,
+        # so single-osc patches stay at full amp: with osc2 present the two
+        # sum to amp * 1.0 rather than amp * 1.6, which could exceed int16
+        # range on its own with both oscillators in phase, before the filter
+        # even sees it. 0.625/0.375 keeps osc2 at 60% of osc1's level.
         # fmt: off
         n1 = synthio.Note(f, waveform=random_phase_wave(self._wave_name),
                           envelope=self._env,

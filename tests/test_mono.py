@@ -8,7 +8,7 @@ Three things here are load-bearing and none of them is obvious:
    get one-voice stealing plus portamento. GLIDE is the third input of
    Synth's shared bend SUM, inert (0.0) while poly.
 2. The 303's DECAY-ONLY filter envelope is Synth's ordinary rising AHR
-   envelope with a NEGATIVE amount -- so the cutoff falls from filt_f while
+   envelope with a NEGATIVE amount, so the cutoff falls from filt_f while
    the key is still down, which AHR is documented as unable to do in its
    usual (positive) direction.
 3. ACCENT must not contaminate the patch. It writes spare block inputs
@@ -55,7 +55,7 @@ ck(syn._glide.b == 0.0, "a glide must always END on the note's own pitch")
 ck(syn._bend in syn.synthio.blocks, "the bend graph must stay rooted, so the glide LFO ticks")
 ck(
     syn._glide_pos not in syn.synthio.blocks,
-    "the glide LFO must NOT be rooted separately -- it is reachable through "
+    "the glide LFO must NOT be rooted separately: it is reachable through "
     "_bend, exactly like _vib_fade inside _vib_lfo.scale",
 )
 
@@ -116,7 +116,7 @@ ck(
 )
 
 # interrupting a glide must start the next one from where the pitch IS,
-# not from the interrupted target -- the same structural continuity as
+# not from the interrupted target: the same structural continuity as
 # AHREnvelope.start_release()'s `env.a = env.value`
 mid = syn._glide.value
 syn.note_on_step(60, slide=True)
@@ -170,7 +170,7 @@ ck(36 not in syn._fenvs, "envmod=0 must build no per-voice envelope node")
 syn.note_on_step(38, accent=True)
 ck(
     38 in syn._fenvs,
-    "an accented step raises the depth off zero, so the node must exist -- "
+    "an accented step raises the depth off zero, so the node must exist; "
     "the depth has to be written BEFORE the press or make() skips it",
 )
 
@@ -228,7 +228,7 @@ syn.save_patch()
 ck(
     patch.filt_f == 2000 and patch.filt_q == 1.4,
     "save_patch() during an accented note must store the KNOB values, not the "
-    "accented ones -- got filt_f=%r filt_q=%r" % (patch.filt_f, patch.filt_q),
+    "accented ones, got filt_f=%r filt_q=%r" % (patch.filt_f, patch.filt_q),
 )
 ck(
     patch.fenv_amount == -1200.0,
@@ -303,7 +303,7 @@ syn.set_param("envmod", 0.9)
 ck(syn.envmod == 0.9, "set_param must reach the property")
 ck(
     "mono" not in syn._PARAMS,
-    "mono is a plain attribute like push_env, NOT a patch field -- listing it "
+    "mono is a plain attribute like push_env, NOT a patch field, listing it "
     "in _PARAMS without a matching _decompile() line is the silent-save trap",
 )
 
@@ -318,7 +318,7 @@ before = syn.amp_env[1]
 syn.decay = 0.05
 ck(
     syn.amp_env[1] == before,
-    "decay must NOT touch the amp envelope -- the amp has to be able to "
+    "decay must NOT touch the amp envelope: the amp has to be able to "
     "outlive the sweep, which is what makes the sweep audible",
 )
 
@@ -361,7 +361,7 @@ bt.note_off(72)
 
 # --- a glide must NOT drag the releasing previous note ------------------
 # The stolen notes share the bend graph, and _aim_glide points it at the
-# NEW note's starting pitch -- offset by the interval. Without freezing,
+# NEW note's starting pitch; offset by the interval. Without freezing,
 # the still-audible old note is yanked that far too, in the WRONG
 # direction: stepping up 43 -> 46 dropped the sounding 43 three semitones
 # BELOW itself before climbing back (measured on rp2040 as 98.0 -> 81.7 Hz).
@@ -389,7 +389,7 @@ ck(
 )
 ck(gl._glide.a < 0, "...gliding UP into 46, i.e. starting flat")
 
-# with no portamento nothing is frozen -- the tail keeps vibrato and wheel
+# with no portamento nothing is frozen, the tail keeps vibrato and wheel
 nog = SubtractiveSynth(synthio.Synthesizer(), Patch(detune=1.0, glide_time=0.0))
 nog.mono = True
 nog.note_on(43)
@@ -397,7 +397,7 @@ old2 = list(nog.voices[43])
 nog.note_on(46)
 ck(
     old2[0].bend is nog._bend,
-    "glide_time 0 must leave the tail on the shared bend -- there is no drag "
+    "glide_time 0 must leave the tail on the shared bend, there is no drag "
     "to prevent, and freezing would needlessly kill its vibrato",
 )
 
@@ -414,7 +414,7 @@ ck(
 
 # --- mono is a PATCH field, and survives a round trip --------------------
 # It used to be a live-only attribute, so a mono lead saved and reloaded
-# came back polyphonic -- with its glide_time intact but inert, since
+# came back polyphonic, with its glide_time intact but inert, since
 # glide does nothing in poly. Half of a coupled pair was being stored.
 
 lead = SubtractiveSynth(synthio.Synthesizer(), Patch(detune=1.0, glide_time=0.2))
@@ -451,13 +451,13 @@ ck(odd.mono is False, "an explicit patch mono=False must override the style")
 # and mono stays OUT of _PARAMS: structural, like the fx_*_on switches
 ck(
     "mono" not in SubtractiveSynth._PARAMS,
-    "mono must not be in _PARAMS -- a CC should not flip mono/poly mid-phrase",
+    "mono must not be in _PARAMS, a CC should not flip mono/poly mid-phrase",
 )
 
 # --- a RELEASED tail must not be dragged by the next glide ---------------
 # Measured on rp2040 before this was fixed: play 48, note_off it, glide to
-# 36, and the still-ringing 48 was thrown up to midi 57.9 -- above both
-# notes -- before sliding back. note_on()'s steal-freeze cannot catch it,
+# 36, and the still-ringing 48 was thrown up to midi 57.9, above both
+# notes, before sliding back. note_on()'s steal-freeze cannot catch it,
 # because note_off() has already popped it out of self.voices.
 seq = SubtractiveSynth(synthio.Synthesizer(), Patch(detune=1.0, glide_time=0.3))
 seq.mono = True

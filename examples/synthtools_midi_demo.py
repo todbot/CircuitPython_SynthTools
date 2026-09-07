@@ -8,7 +8,7 @@
 #
 # Libraries needed:  circup install tmidi synthtools
 #
-# UART (DIN/TRS) MIDI is optional -- set USE_UART_MIDI False if you have no
+# UART (DIN/TRS) MIDI is optional; set USE_UART_MIDI False if you have no
 # MIDI jack wired up. Pins are the pico_test_synth ones: GP17 in, GP16 out.
 #
 # Two things to know about the CCs:

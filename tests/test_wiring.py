@@ -3,7 +3,7 @@
 """Integration checks for synthtools' Synth against the synthio stubs.
 
 Proves: block identity and sharing, in-place buffer rewrites, param routing,
-and -- new -- that the patch is NOT live state. No DSP: the stubs do not render audio.
+and (new) that the patch is NOT live state. No DSP: the stubs do not render audio.
 
 The filter cutoff bus:
 
@@ -50,17 +50,17 @@ def vals(a):
 # against: wavetable is simply never imported unless asked for. That is
 # strictly better than the try/except this file used to carry, where the
 # name silently did not exist and the user got "cannot import name".
-# There is no adafruit_wave stub here, so this path runs every time
-# -- which also means WavetableSynth itself is NOT covered by these tests.
+# There is no adafruit_wave stub here, so this path runs every time,
+# which also means WavetableSynth itself is NOT covered by these tests.
 ck(hasattr(synthtools, "Synth") and hasattr(synthtools, "SubtractiveSynth"),
    "core exports must survive a missing adafruit_wave")
 ck(not any(m.endswith(".wavetable") or m.endswith(".wavetable_synth")
            for m in sys.modules),
-   "importing synthtools must not pull wavetable in at all -- that, not a "
+   "importing synthtools must not pull wavetable in at all (that, not a "
    "try/except, is what makes a board without adafruit_wave work")
 try:
     synthtools.WavetableSynth
-    fails.append("WavetableSynth must raise without adafruit_wave -- if this "
+    fails.append("WavetableSynth must raise without adafruit_wave) if this "
                  "fails, a real adafruit_wave is installed and the "
                  "missing-dependency path is no longer being tested")
 except ImportError as e:
@@ -102,7 +102,7 @@ ck(s._vib_lfo in sio.blocks,
 ck(s._filt_lfo in sio.blocks,
    "the filter LFO must be appended to synth.blocks or it never ticks")
 # Math blocks need rooting too, not just LFOs. _filt_base and _bend are only
-# reachable through a voice, so with nothing sounding they freeze -- and on a
+# reachable through a voice, so with nothing sounding they freeze, and on a
 # fresh Synth they have never been evaluated. Measured on hardware: without
 # this the first note-on read its cutoff as 0.0 Hz.
 ck(s._filt_base in sio.blocks,
@@ -147,7 +147,7 @@ for _i in range(65):
 s._filt_lfo.phase = 0.0
 
 ck(abs(lfo_lo) < 1e-6,
-   "the LFO's floor must be exactly 0 -- it ADDS to filt_f, never subtracts. "
+   "the LFO's floor must be exactly 0; it ADDS to filt_f, never subtracts. "
    "Got %r; a negative floor means the bipolar default waveform is back" % lfo_lo)
 ck(abs(lfo_hi - 1500) < 1.0,
    "the LFO must reach the full amount at its peak, got %r" % lfo_hi)
@@ -205,7 +205,7 @@ s.filt_lfo_amount = 700
 
 ck(pat.filt_f == 1000, "a knob turn must NOT reach the patch")
 ck(pat.amp_env[0] == 0.01 and pat.amp_env[3] == 0.35,
-   "amp_env must be COPIED at load, not aliased -- otherwise an in-place "
+   "amp_env must be COPIED at load, not aliased, otherwise an in-place "
    "element write leaks straight into the patch")
 ck(pat.fenv_amount == 3000, "fenv_amount must not reach the patch either")
 ck(pat.wave == "SAW", "a subclass param must not reach the patch")
@@ -234,8 +234,8 @@ ck(pat.amp_env[0] == 0.5,
    "keep leaking into the patch")
 
 # --- a patch file older than the current fields must LOAD, not just parse ---
-# Patch.__init__ sets every default BEFORE applying kwargs, so any Patch --
-# however old the JSON -- always carries the newer fields, and _recompile can
+# Patch.__init__ sets every default BEFORE applying kwargs, so any Patch,
+# however old the JSON, always carries the newer fields, and _recompile can
 # read p.filt_lfo_rate & co. unguarded. That is a property of Patch, not an
 # accident, so it is worth a test that drives it all the way through the
 # engine rather than only checking Patch's own defaults.
@@ -247,7 +247,7 @@ ck(s.filt_vel == 0, "a pre-velocity patch must load with no velocity response")
 s.note_on(60, velocity=100)           # and the note-on path must survive it
 ck(60 in s.voices, "a legacy patch must still play")
 s.all_notes_off()
-# the retired field rides along untouched -- Patch round-trips unknown keys,
+# the retired field rides along untouched; Patch round-trips unknown keys,
 # and _decompile has no reason to touch one it does not own
 s.save_patch()
 ck(legacy.to_dict().get("fenv_hold") == 0.2,
@@ -319,12 +319,12 @@ ck(cur_shape[32] > lin_shape[32], "curve=2 must sit above linear mid-rise")
 # --- release: endpoints swap, waveform is NEVER reassigned ---------------
 # synthio.LFO.waveform is read-only on real hardware, so a release that
 # reassigns it raises AttributeError at every note-off. The stub enforces
-# that too -- check the guard itself still works, or this whole section
+# that too: check the guard itself still works, or this whole section
 # quietly stops meaning anything.
 try:
     pos.waveform = s._fenv._wave
     fails.append("the synthio stub must refuse to reassign LFO.waveform, "
-                 "the way real synthio does -- otherwise it cannot catch the "
+                 "the way real synthio does, otherwise it cannot catch the "
                  "bug it exists to catch")
 except AttributeError:
     pass
@@ -336,7 +336,7 @@ s.note_off(60)
 ck(pos.waveform is wave_before, "release must NOT reassign the LFO's waveform")
 ck(pos.rate is s._fenv._rate_r, "release must swap to the shared release rate")
 ck(env.b is s._fenv._rel_amt,
-   "release must aim at the shared release-amount BLOCK, not a bare 0.0 -- "
+   "release must aim at the shared release-amount BLOCK, not a bare 0.0, "
    "that is what removes the rising/falling branch and keeps the target live")
 ck(abs(env.b.value) < 1e-6,
    "...and for a filter envelope that block holds 0.0, got %r" % env.b.value)
@@ -347,11 +347,11 @@ ck(abs(cutoff.value - mid) < 1e-6,
 # --- the release must be a DECAY, not a mirrored attack ------------------
 # NOTE this section deliberately runs with fenv_curve still at 2. At curve=1
 # the correct and the broken shapes are algebraically identical (1-t == 1-t),
-# so a release only ever tested at curve=1 proves nothing about the shape --
+# so a release only ever tested at curve=1 proves nothing about the shape,
 # which is exactly how the mirrored-attack release shipped.
 #
 # release(t) = V * (1 - s(t)). With s = 1-(1-t)^2 that is V*(1-t)^2:
-# 0.258*V by halfway. With the old s = t^2 it would read 0.758*V -- hanging
+# 0.258*V by halfway. With the old s = t^2 it would read 0.758*V: hanging
 # near the top, then falling off a cliff.
 pos.phase = 0.5
 want = v_start * (1.0 - s._fenv._wave[31] / float(ENV_PEAK))
@@ -360,7 +360,7 @@ ck(abs(env.value - want) < 1e-6,
    "%r want %r" % (env.value, want))
 ck(env.value < 0.5 * v_start,
    "halfway through the release the envelope must be past half its starting "
-   "height (%r of %r) -- anything above that is a mirrored attack, not a decay"
+   "height (%r of %r), anything above that is a mirrored attack, not a decay"
    % (env.value, v_start))
 
 pos.phase = 1.0
@@ -410,7 +410,7 @@ ck(abs(s._vib_fade.rate - 1.0 / 1.5) < 1e-6,
    "vib_delay must set the fade rate to 1/seconds, got %r" % s._vib_fade.rate)
 ck(s._vib_fade.once, "the fade ramp must be one-shot")
 ck(s._vib_fade.waveform is not None,
-   "the fade needs an explicit RAMP waveform -- synthio's default is a "
+   "the fade needs an explicit RAMP waveform, synthio's default is a "
    "zero-centred triangle, which would come back down again")
 ck(s.vib_delay == 1.5, "the getter must read live state")
 
@@ -438,7 +438,7 @@ s.note_on(60)
 ck(s._vib_fade.retriggered == 1, "the first note from silence must retrigger")
 s.note_on(64)
 ck(s._vib_fade.retriggered == 1,
-   "adding a note to a held chord must NOT restart the fade -- that would "
+   "adding a note to a held chord must NOT restart the fade, that would "
    "duck everyone's vibrato back to zero")
 s.note_off(60)
 s.note_on(67)
@@ -507,7 +507,7 @@ s.all_notes_off()
 s.load_patch(Patch(penv_amount=0.0, penv_out_amount=0.3, penv_out_time=0.2))
 s.note_on(60)
 ck(60 in s._penvs,
-   "an out-only pitch envelope must still build its node at note-on -- "
+   "an out-only pitch envelope must still build its node at note-on, "
    "note-off has nothing to re-aim otherwise")
 ck(abs(s._penvs[60].value) < 1e-6,
    "...and read 0 during the note, got %r" % s._penvs[60].value)
@@ -542,7 +542,7 @@ s.all_notes_off()
 # =====================================================================
 
 # --- reusability: the envelope must work with no filter anywhere ---------
-# This is the property a future pitch envelope needs -- the envelope takes
+# This is the property a future pitch envelope needs, the envelope takes
 # no destination at all, and nothing here touches a Biquad.
 solo = AHREnvelope(attack=0.1, release=0.2, amount=1.0)
 senv = solo.make()
@@ -667,9 +667,9 @@ print("shape linear:", [lin_shape[i] for i in (0, 16, 32, 48, 63)])
 print("shape curve2:", [cur_shape[i] for i in (0, 16, 32, 48, 63)])
 # --- keyboard tracking: filt_track ---------------------------------------
 # The Swarmatron's 'T' switch: the cutoff follows the BASE pitch, with the
-# knob setting amount AND direction. Same idiom as filt_vel -- a per-voice
+# knob setting amount AND direction. Same idiom as filt_vel (a per-voice
 # constant from the note, times a shared block that stays live inside the
-# graph -- so this is Synth behaviour, not a swarm-specific one.
+# graph), so this is Synth behaviour, not a swarm-specific one.
 st = SubtractiveSynth(sio, Patch(filt_type="LPF", filt_f=1000, filt_q=1.0,
                                  fenv_amount=0, filt_vel=0, filt_track=0.0))
 
@@ -727,7 +727,7 @@ ck(st.voices[96][0].filter.frequency.value >= Synth.FILT_F_MIN,
 st.note_off(96)
 st.filt_track = 0.0
 
-# tracking and velocity coexist -- they fold into ONE node, not four inputs
+# tracking and velocity coexist; they fold into ONE node, not four inputs
 st.filt_track = 1.0
 st.filt_vel = 500
 st.note_on(72, velocity=127)

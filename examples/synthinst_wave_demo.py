@@ -10,7 +10,7 @@
 #
 #     import synthinst_wave_demo
 #
-# filt_type=None -- no filter at all -- on purpose: this demo is about
+# filt_type=None (no filter at all) on purpose: this demo is about
 # telling the OSCILLATOR waveforms apart, and a filter would flatten
 # exactly the harmonic differences (especially the two hand-drawn "analog"
 # waves vs. the plain formula ones) that are the point of listening.
@@ -19,7 +19,7 @@
 # change underneath it. Both are live properties
 # (see SubtractiveSynth.wave/.detune in subtractive_synth.py) that only
 # take effect on the arpeggiator's NEXT note-on, so the swap is always
-# clean -- no click mid-note.
+# clean: no click mid-note.
 
 import time
 
@@ -30,7 +30,7 @@ from synthtools import Patch, SubtractiveSynth
 from synthtools.waves import wave_names
 
 DURATION = 3.0  # seconds per wave
-# DETUNE = 1.01  # ~17 cents -- clearly audible in a 3s clip, still musical
+# DETUNE = 1.01  # ~17 cents: clearly audible in a 3s clip, still musical
 DETUNE = 1.004
 
 patch = Patch(
@@ -45,7 +45,7 @@ patch = Patch(
 
 synth = SubtractiveSynth(engine, patch)
 
-# root, major third, fifth, octave -- one bar of a plain major arpeggio
+# root, major third, fifth, octave, one bar of a plain major arpeggio
 root_note = 48  # C3
 arp_notes = [root_note, root_note + 4, root_note + 7, root_note + 12, root_note + 7]
 
@@ -59,7 +59,7 @@ def note_off(midi_note):
 
 
 arp = Arpeggiator(120, note_on, note_off)
-arp.set_bpm(120, 4)  # 10bpm 16th notes -- ~9 cycles of the 4-note pattern per DURATION
+arp.set_bpm(120, 4)  # 10bpm 16th notes, ~9 cycles of the 4-note pattern per DURATION
 arp.notes = arp_notes
 arp.start()
 

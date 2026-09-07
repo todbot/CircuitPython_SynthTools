@@ -17,7 +17,7 @@
 #   env = Math(CONSTRAINED_LERP, amount, 0.0, pos)     <- this is `bend` below
 #
 # `bend` is a live block, so wiring it straight into Note(bend=bend) is the
-# whole hookup -- no synth.blocks.append() needed, because the block is
+# whole hookup; no synth.blocks.append() needed, because the block is
 # reachable through the sounding Note itself
 #
 # --- bend units ------------------------------------------------------------
@@ -26,16 +26,16 @@
 # --- why falling=True --------------------------------------------------
 # falling=True makes make() return CONSTRAINED_LERP(amount, 0.0, pos): the
 # note starts `amount` away from true pitch and eases DOWN to 0 over
-# `attack` seconds -- a "scoop" into pitch, the classic slide/horn attack.
+# `attack` seconds; a "scoop" into pitch, the classic slide/horn attack.
 # start_release() then re-aims the SAME position LFO on to release_amount,
 # so if you let go of the key mid-attack the fall picks up from wherever the
-# bend actually got to -- it does not jump anywhere first.
+# bend actually got to: it does not jump anywhere first.
 #
 # --- why release_amount is nonzero --------------------------------------
 # release_amount=0.0 would make start_release() a no-op here: by the time a
 # held note releases, the attack has already finished at bend=0.0, so a
 # lerp from 0.0 to 0.0 moves nothing. -0.3 gives the release something to
-# do -- the pitch sags down as the note dies, the way synthinst_pitch_demo's
+# do: the pitch sags down as the note dies, the way synthinst_pitch_demo's
 # penv_out_amount does at the SubtractiveSynth level.
 #
 # --- why the Note gets its own envelope ---------------------------------
@@ -56,7 +56,7 @@ penv = AHREnvelope(
     attack=0.7,  # seconds to ease from `amount` down to true pitch
     release=0.35,  # seconds to sag on to release_amount after note-off
     amount=0.5,  # half-octave sharp
-    curve=2,  # curved, not linear -- fast off the start, easing into 0
+    curve=2,  # curved, not linear, fast off the start, easing into 0
     falling=True,  # amount -> 0 on press, 0 -> release_amount on release
     release_amount=-0.3,  # sag ~4 semitones flat as the note dies
 )
@@ -66,7 +66,7 @@ note_env = synthio.Envelope(attack_time=0.01, release_time=0.8, sustain_level=0.
 
 
 def sample(bend, seconds):
-    """Print bend.value a few times a second -- this is what turns the
+    """Print bend.value a few times a second, this is what turns the
     demo from a wiring snippet into something you can watch happen."""
     steps = max(int(seconds / 0.05), 1)
     for _ in range(steps):
@@ -76,16 +76,16 @@ def sample(bend, seconds):
 
 while True:
     # One call per press: make() is a per-voice factory, so a new Note
-    # gets its own position LFO and its own CONSTRAINED_LERP -- polyphony
+    # gets its own position LFO and its own CONSTRAINED_LERP, polyphony
     # is fine here even though penv itself is a single shared instance.
     bend = penv.make()
     note = synthio.Note(synthio.midi_to_hz(NOTE), bend=bend, envelope=note_env)
 
-    print("press  -- bend eases into set pitch")
+    print("press , bend eases into set pitch")
     synth.press(note)
     sample(bend, 0.7)
 
-    print("release -- bend eases out of set pitch")
+    print("release, bend eases out of set pitch")
     penv.start_release(bend)
     synth.release(note)
     sample(bend, 0.7)
