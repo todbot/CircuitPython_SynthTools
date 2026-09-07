@@ -61,14 +61,13 @@ class ParamScaler:
     :param deadband: knob movement below this counts as no movement. See
         below: this is not optional on real hardware.
 
-    **A deadband is required, and it is not a nicety.** The step is scaled
+    **A deadband is required.**  The step is scaled
     by the runway on the side the knob moved TOWARD, so the two directions
     are not symmetric. With the value at 10 and the knob sitting at 200, a
     single count of noise upward moves the value +4.46 while a count
     downward moves it -0.05: 89:1. Symmetric ADC noise is therefore a
-    RATCHET that walks the value onto the knob: measured in simulation,
-    +/-0.5 counts of noise dragged an untouched value from 10 to 114 in
-    200 updates. The symptom is a value that "tracks the pots" on its own
+    RATCHET that walks the value onto the knob.
+    The symptom is a value that "tracks the pots" on its own
     after a page change, when it should sit still until a pot is turned.
 
     The deadband must exceed the noise still present in the reading you

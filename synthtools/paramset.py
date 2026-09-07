@@ -2,18 +2,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2023 Tod Kurt
 # SPDX-License-Identifier: MIT
 """
-``param_set.py``
+``paramset``
 ================================================================================
 
-``ParamSet`` is a collection of ``Param`` objects that track normalized
-    knob positions, especially for the case when there are fewer knobs
-    than params.
+``ParamSet`` tracks a collection of ``Param`` objects against normalized
+knob positions, for panels with fewer knobs than parameters.
 
-Each ``Param`` is a UI- and implementation-independent way of describing
-    a named numerical parameter with a min/max, a display format, and
-    (optionally) an object attribute that they represent.
-
-20 May 2025 - @todbot / Tod Kurt
+Part of synthtools.
 
 """
 
