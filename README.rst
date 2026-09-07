@@ -30,7 +30,7 @@ Concepts pulled from these projects and others:
 
 - `CircuitPython Synthio Tutorial <https://todbot.github.io/CircuitPython_Synthio_Tutorial/>`_
 - `circuitpython synthio tricks <https://github.com/todbot/circuitpython-synthio-tricks>`_
-- `synthiotah <https://github.com/todbot/synthiota>`_
+- `synthiota <https://github.com/todbot/synthiota>`_
 - `pico_test_synth <https://github.com/todbot/pico_test_synth>`_
 - `picotouch_synth <https://github.com/todbot/picotouch_synth>`_
 - `picostepseq <https://github.com/todbot/picostepseq>`_
