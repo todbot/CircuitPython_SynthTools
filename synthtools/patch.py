@@ -29,6 +29,11 @@ class Patch:
         self.vib_delay = 0.0  # seconds for vibrato to fade in (0 = immediate)
         # Portamento. Only applies while the synth's `mono` is set; a
         # polyphonic synth ignores it. 0 = jump straight to pitch.
+        # One voice at a time. None means "unspecified -- use whatever the
+        # style defaults to", which is what keeps a BasslineSynth or
+        # SwarmSynth patch written before this field existed from loading
+        # as polyphonic. True/False pin it explicitly.
+        self.mono = None
         self.glide_time = 0.0  # seconds to slide from the previous note
         # Pitch envelope, in the same bend units. Bends INTO the note from
         # penv_amount to true pitch, then on note-off drifts OUT to

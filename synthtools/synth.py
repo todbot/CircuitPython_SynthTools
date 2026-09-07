@@ -93,8 +93,16 @@ class Synth:
     #:     lead.glide_time = 0.08
     #:
     #: Glide is meaningless in poly -- one shared bend would drag every
-    #: sounding voice -- so it is only applied while this is set. A plain
-    #: attribute rather than a patch field, like ``push_env``.
+    #: sounding voice -- so it is only applied while this is set.
+    #:
+    #: This is the STYLE's default. ``Patch.mono`` overrides it per patch
+    #: (``None`` there means "leave the style's default alone"), and
+    #: ``save_patch()`` writes back whatever is live, so a mono lead
+    #: survives a save/load round trip along with its ``glide_time``.
+    #: Deliberately NOT in ``_PARAMS``: it is structural, like
+    #: BasslineSynth's ``fx_*_on`` switches, and a MIDI CC flipping a synth
+    #: between mono and poly mid-phrase is not something to expose by
+    #: accident.
     mono = False
 
     # The cutoff bus can now be driven below zero -- a downward fenv_amount,
@@ -253,6 +261,12 @@ class Synth:
         """Compile patch data into live blocks and cached natives. Once per
         patch load, never per note. Subclasses call super()._recompile()."""
         p = self.patch
+        # type(self).mono, NOT False: styles that are inherently monophonic
+        # (BasslineSynth, SwarmSynth) declare it as a class attribute, and a
+        # patch that simply does not mention mono must not de-mono them.
+        # Assigning here shadows the class attribute with an instance one.
+        want_mono = getattr(p, "mono", None)
+        self.mono = type(self).mono if want_mono is None else want_mono
         self._filt_type = p.filt_type
         self._filt_mode = FILTER_MODES.get(p.filt_type)  # None = no filter
         # list(), NOT the patch's own list: attack_time & friends mutate
@@ -283,6 +297,7 @@ class Synth:
         """Push live state back into self.patch. The opposite of
         _recompile(). Subclasses call super()._decompile()."""
         p = self.patch
+        p.mono = self.mono  # resolves "unspecified" to what is actually live
         p.filt_type = self._filt_type
         p.amp_env = list(self._amp_env)  # copy out, so later knob turns
         #                                     do not leak into the patch

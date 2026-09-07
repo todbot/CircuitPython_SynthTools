@@ -53,15 +53,19 @@ syn = make(filt_f=2000, envmod=0.5)
 ck(syn._bend.c is syn._glide, "glide must occupy the shared bend SUM's third input")
 ck(syn._glide.b == 0.0, "a glide must always END on the note's own pitch")
 ck(syn._bend in syn.synthio.blocks, "the bend graph must stay rooted, so the glide LFO ticks")
-ck(syn._glide_pos not in syn.synthio.blocks,
-   "the glide LFO must NOT be rooted separately -- it is reachable through "
-   "_bend, exactly like _vib_fade inside _vib_lfo.scale")
+ck(
+    syn._glide_pos not in syn.synthio.blocks,
+    "the glide LFO must NOT be rooted separately -- it is reachable through "
+    "_bend, exactly like _vib_fade inside _vib_lfo.scale",
+)
 
 # a POLY synth carries the same node, silent and unwritten
 poly = SubtractiveSynth(synthio.Synthesizer(), Patch(detune=1.0))
 ck(poly.mono is False, "Synth must default to polyphonic")
-ck(poly._glide.a == 0.0 and poly._glide.value == 0.0,
-   "the glide node must contribute nothing until mono writes it")
+ck(
+    poly._glide.a == 0.0 and poly._glide.value == 0.0,
+    "the glide node must contribute nothing until mono writes it",
+)
 poly.note_on(60)
 poly.note_on(64)
 ck(len(poly.voices) == 2, "a poly synth must still stack voices")
@@ -81,13 +85,18 @@ lead = SubtractiveSynth(synthio.Synthesizer(), Patch(detune=1.0, glide_time=0.08
 lead.mono = True
 lead.note_on(60)
 lead.note_on(64)
-ck(len(lead.voices) == 1 and 64 in lead.voices,
-   "mono must steal the sounding voice whatever note it was, not only a "
-   "re-press of the same one")
-ck(abs(lead._glide.a - (60 - 64) / 12.0) < 1e-9,
-   "a mono note-on must aim the glide from the previous note, got %r" % lead._glide.a)
-ck(lead.voices[64][0].bend is lead._bend,
-   "the voice must read the SHARED bend, which is what carries the glide")
+ck(
+    len(lead.voices) == 1 and 64 in lead.voices,
+    "mono must steal the sounding voice whatever note it was, not only a re-press of the same one",
+)
+ck(
+    abs(lead._glide.a - (60 - 64) / 12.0) < 1e-9,
+    "a mono note-on must aim the glide from the previous note, got %r" % lead._glide.a,
+)
+ck(
+    lead.voices[64][0].bend is lead._bend,
+    "the voice must read the SHARED bend, which is what carries the glide",
+)
 lead.note_off(64)
 ck(not lead.voices, "note_off must still work normally in mono")
 
@@ -100,17 +109,21 @@ syn.all_notes_off()
 syn.note_on_step(36)
 ck(syn._glide.a == 0.0, "the first note ever has nothing to glide from")
 syn.note_on_step(48, slide=True)
-ck(abs(syn._glide.a - (-1.0)) < 1e-9,
-   "gliding up an octave must start one octave BELOW the new note "
-   "(bend units are octaves), got %r" % syn._glide.a)
+ck(
+    abs(syn._glide.a - (-1.0)) < 1e-9,
+    "gliding up an octave must start one octave BELOW the new note "
+    "(bend units are octaves), got %r" % syn._glide.a,
+)
 
 # interrupting a glide must start the next one from where the pitch IS,
 # not from the interrupted target -- the same structural continuity as
 # AHREnvelope.start_release()'s `env.a = env.value`
 mid = syn._glide.value
 syn.note_on_step(60, slide=True)
-ck(abs(syn._glide.a - ((48 - 60) / 12.0 + mid)) < 1e-9,
-   "an interrupted glide must carry its in-flight value into the next one")
+ck(
+    abs(syn._glide.a - ((48 - 60) / 12.0 + mid)) < 1e-9,
+    "an interrupted glide must carry its in-flight value into the next one",
+)
 
 # --- the decay-only filter envelope --------------------------------------
 # fenv_amount is NEGATIVE, so the ordinary rising AHR shape sweeps the
@@ -118,8 +131,10 @@ ck(abs(syn._glide.a - ((48 - 60) / 12.0 + mid)) < 1e-9,
 # gesture AHR is documented as unable to make in its positive direction.
 
 syn = make(filt_f=4000, envmod=0.5, fenv_attack=0.2, fenv_curve=2)
-ck(syn.fenv_amount == -2000.0,
-   "envmod is a FRACTION of filt_f: 0.5 of 4000 must be -2000 Hz, got %r" % syn.fenv_amount)
+ck(
+    syn.fenv_amount == -2000.0,
+    "envmod is a FRACTION of filt_f: 0.5 of 4000 must be -2000 Hz, got %r" % syn.fenv_amount,
+)
 syn.filt_f = 2000
 ck(syn.fenv_amount == -1000.0, "moving the cutoff must move the sweep with it")
 syn.envmod = 1.0
@@ -143,33 +158,43 @@ ck(bottom < top, "a 303 filter envelope must fall, not rise")
 syn = make(filt_f=1000, envmod=1.0, fenv_attack=0.1)
 syn.note_on_step(36)
 syn._fenvs[36].c.phase = 1.0
-ck(syn.voices[36][0].filter.frequency.value == syn.FILT_F_MIN,
-   "envmod=1.0 drives the cutoff to zero; FILT_F_MIN must clamp it")
+ck(
+    syn.voices[36][0].filter.frequency.value == syn.FILT_F_MIN,
+    "envmod=1.0 drives the cutoff to zero; FILT_F_MIN must clamp it",
+)
 
 # envmod = 0 must cost nothing at all, and accent must still revive it
 syn = make(filt_f=3000, envmod=0.0)
 syn.note_on_step(36)
 ck(36 not in syn._fenvs, "envmod=0 must build no per-voice envelope node")
 syn.note_on_step(38, accent=True)
-ck(38 in syn._fenvs,
-   "an accented step raises the depth off zero, so the node must exist -- "
-   "the depth has to be written BEFORE the press or make() skips it")
+ck(
+    38 in syn._fenvs,
+    "an accented step raises the depth off zero, so the node must exist -- "
+    "the depth has to be written BEFORE the press or make() skips it",
+)
 
 # filt_type=None in mono: the voice gets no filter at all, and the cutoff
 # property is the one place the two can disagree
 nofilt = make(filt_type=None, envmod=0.75)
 nofilt.note_on_step(36)
 ck(nofilt.voices[36][0].filter is None, "filt_type=None must give the voice no filter")
-ck(nofilt.filter is None,
-   "...and nothing downstream can track a filter that does not exist")
+ck(nofilt.filter is None, "...and nothing downstream can track a filter that does not exist")
 nofilt.all_notes_off()
 
 # --- accent must not contaminate the patch -------------------------------
 # Every accent target is a shared block that Synth also reads back for
 # save_patch(). Accent therefore writes SPARE inputs of those blocks.
 
-syn = make(filt_f=2000, filt_q=1.4, envmod=0.6, accent=0.5,
-           accent_cutoff=4000.0, accent_q=0.6, amp_level=0.8)
+syn = make(
+    filt_f=2000,
+    filt_q=1.4,
+    envmod=0.6,
+    accent=0.5,
+    accent_cutoff=4000.0,
+    accent_q=0.6,
+    amp_level=0.8,
+)
 patch = syn.patch
 
 syn.note_on_step(36, accent=False)
@@ -180,13 +205,19 @@ ck(plain.envelope.attack_level == 0.8, "an un-accented step plays at amp_level")
 
 syn.note_on_step(38, accent=True)
 acc = syn.voices[38][0]
-ck(acc.filter.frequency.value == 4000.0,
-   "accent must ADD accent_cutoff*accent Hz, got %r" % acc.filter.frequency.value)
-ck(abs(acc.filter.Q.value - 1.7) < 1e-9,
-   "accent must add accent_q*accent to the resonance, got %r" % acc.filter.Q.value)
+ck(
+    acc.filter.frequency.value == 4000.0,
+    "accent must ADD accent_cutoff*accent Hz, got %r" % acc.filter.frequency.value,
+)
+ck(
+    abs(acc.filter.Q.value - 1.7) < 1e-9,
+    "accent must add accent_q*accent to the resonance, got %r" % acc.filter.Q.value,
+)
 ck(acc.envelope.attack_level == 1.0, "accent must raise the level")
-ck(acc.envelope is not plain.envelope,
-   "the accented Envelope must be a separate cached object, not a rebuild")
+ck(
+    acc.envelope is not plain.envelope,
+    "the accented Envelope must be a separate cached object, not a rebuild",
+)
 
 # ...and the knobs must still read back as the KNOBS
 ck(syn.filt_f == 2000, "filt_f must read back clean during an accented note, got %r" % syn.filt_f)
@@ -194,12 +225,16 @@ ck(syn.filt_q == 1.4, "filt_q must read back clean during an accented note, got 
 ck(syn.envmod == 0.6, "envmod must read back clean during an accented note")
 
 syn.save_patch()
-ck(patch.filt_f == 2000 and patch.filt_q == 1.4,
-   "save_patch() during an accented note must store the KNOB values, not the "
-   "accented ones -- got filt_f=%r filt_q=%r" % (patch.filt_f, patch.filt_q))
-ck(patch.fenv_amount == -1200.0,
-   "fenv_amount is derived from envmod, so it must be saved un-accented "
-   "(-0.6*2000), got %r" % patch.fenv_amount)
+ck(
+    patch.filt_f == 2000 and patch.filt_q == 1.4,
+    "save_patch() during an accented note must store the KNOB values, not the "
+    "accented ones -- got filt_f=%r filt_q=%r" % (patch.filt_f, patch.filt_q),
+)
+ck(
+    patch.fenv_amount == -1200.0,
+    "fenv_amount is derived from envmod, so it must be saved un-accented "
+    "(-0.6*2000), got %r" % patch.fenv_amount,
+)
 ck(patch.envmod == 0.6 and patch.accent == 0.5, "the 303 knobs must round-trip")
 
 # an un-accented step must put every one of them back
@@ -211,33 +246,66 @@ ck(back.envelope.attack_level == 0.8, "an un-accented step must clear the level 
 
 # --- patch round-trip ----------------------------------------------------
 
-syn = make(filt_f=1800, envmod=0.7, accent=0.3, slide_time=0.08,
-           transpose=-12, amp_level=0.7, glide_time=0.05, wave="SQU")
+syn = make(
+    filt_f=1800,
+    envmod=0.7,
+    accent=0.3,
+    slide_time=0.08,
+    transpose=-12,
+    amp_level=0.7,
+    glide_time=0.05,
+    wave="SQU",
+)
 p2 = Patch.from_json(syn.save_patch().to_json())
 again = BasslineSynth(synthio.Synthesizer(), p2)
-for name in ("filt_f", "envmod", "accent", "slide_time", "transpose",
-             "amp_level", "glide_time", "wave", "fenv_amount"):
-    ck(getattr(again, name) == getattr(syn, name),
-       "%s must survive a save/load round-trip: %r != %r"
-       % (name, getattr(again, name), getattr(syn, name)))
+for name in (
+    "filt_f",
+    "envmod",
+    "accent",
+    "slide_time",
+    "transpose",
+    "amp_level",
+    "glide_time",
+    "wave",
+    "fenv_amount",
+):
+    ck(
+        getattr(again, name) == getattr(syn, name),
+        "%s must survive a save/load round-trip: %r != %r"
+        % (name, getattr(again, name), getattr(syn, name)),
+    )
 
 # a patch written before any of these fields existed must still load
 legacy = BasslineSynth(synthio.Synthesizer(), Patch.from_json('{"name":"old","filt_f":900}'))
-ck(legacy.envmod == 0.5 and legacy.accent == 0.5 and legacy.wave == "SAW",
-   "an older patch must load on defaults rather than raising")
+ck(
+    legacy.envmod == 0.5 and legacy.accent == 0.5 and legacy.wave == "SAW",
+    "an older patch must load on defaults rather than raising",
+)
 ck(legacy.glide_time == 0.0, "glide_time must default to no portamento")
 
 # --- set_param covers the new knobs --------------------------------------
 
 syn = make()
-for name in ("glide_time", "envmod", "decay", "accent", "wave",
-             "accent_cutoff", "accent_q", "slide_time", "transpose", "amp_level"):
+for name in (
+    "glide_time",
+    "envmod",
+    "decay",
+    "accent",
+    "wave",
+    "accent_cutoff",
+    "accent_q",
+    "slide_time",
+    "transpose",
+    "amp_level",
+):
     ck(name in syn._PARAMS, "%s must be reachable via set_param()" % name)
 syn.set_param("envmod", 0.9)
 ck(syn.envmod == 0.9, "set_param must reach the property")
-ck("mono" not in syn._PARAMS,
-   "mono is a plain attribute like push_env, NOT a patch field -- listing it "
-   "in _PARAMS without a matching _decompile() line is the silent-save trap")
+ck(
+    "mono" not in syn._PARAMS,
+    "mono is a plain attribute like push_env, NOT a patch field -- listing it "
+    "in _PARAMS without a matching _decompile() line is the silent-save trap",
+)
 
 # decay is the FILTER fall time only. Tying it to the amp decay as well
 # (an earlier version did) makes envmod nearly inaudible: the note fades
@@ -248,29 +316,36 @@ ck(syn.fenv_attack == 0.3, "decay must set the filter fall time")
 ck(syn.decay == 0.3, "decay must read back what was written")
 before = syn.amp_env[1]
 syn.decay = 0.05
-ck(syn.amp_env[1] == before,
-   "decay must NOT touch the amp envelope -- the amp has to be able to "
-   "outlive the sweep, which is what makes the sweep audible")
+ck(
+    syn.amp_env[1] == before,
+    "decay must NOT touch the amp envelope -- the amp has to be able to "
+    "outlive the sweep, which is what makes the sweep audible",
+)
 
 # --- keyboard tracking on the ONE shared mono cutoff node ----------------
 # BasslineSynth reuses a single cutoff node across notes, re-aiming its
 # spare .b/.c inputs. That makes a STALE slot the real hazard: turning
 # filt_track off must actually clear the offset, not leave the last note's
 # tracking baked into the node every note after.
-bt = BasslineSynth(synthio.Synthesizer(),
-                   Patch(filt_type="LPF", filt_f=1000, filt_q=1.0,
-                         fenv_amount=0, filt_vel=0, filt_track=1.0))
-bt.note_on(72, velocity=80)   # below accent_velocity: accent writes
-cut = bt._cutoff              # _filt_sum.c and would move the base
-ck(abs(cut.value - 2000.0) < 0.01,
-   "mono full tracking an octave up must double the cutoff, got %r" % cut.value)
+bt = BasslineSynth(
+    synthio.Synthesizer(),
+    Patch(filt_type="LPF", filt_f=1000, filt_q=1.0, fenv_amount=0, filt_vel=0, filt_track=1.0),
+)
+bt.note_on(72, velocity=80)  # below accent_velocity: accent writes
+cut = bt._cutoff  # _filt_sum.c and would move the base
+ck(
+    abs(cut.value - 2000.0) < 0.01,
+    "mono full tracking an octave up must double the cutoff, got %r" % cut.value,
+)
 bt.note_off(72)
 
-bt.filt_track = 0.0                       # knob to zero...
-bt.note_on(72, velocity=80)               # ...then press the SAME note again
-ck(abs(cut.value - 1000.0) < 0.01,
-   "with filt_track 0 the shared node must be CLEARED to filt_f, not keep "
-   "the previous note's tracking offset: want 1000, got %r" % cut.value)
+bt.filt_track = 0.0  # knob to zero...
+bt.note_on(72, velocity=80)  # ...then press the SAME note again
+ck(
+    abs(cut.value - 1000.0) < 0.01,
+    "with filt_track 0 the shared node must be CLEARED to filt_f, not keep "
+    "the previous note's tracking offset: want 1000, got %r" % cut.value,
+)
 bt.note_off(72)
 
 # and it still reaches a sounding mono voice
@@ -278,8 +353,10 @@ bt.filt_track = 1.0
 bt.note_on(72, velocity=80)
 ck(abs(cut.value - 2000.0) < 0.01, "sanity before the live write")
 bt.filt_track = 0.5
-ck(abs(cut.value - 1500.0) < 0.01,
-   "filt_track must move the sounding mono voice: want 1500, got %r" % cut.value)
+ck(
+    abs(cut.value - 1500.0) < 0.01,
+    "filt_track must move the sounding mono voice: want 1500, got %r" % cut.value,
+)
 bt.note_off(72)
 
 # --- a glide must NOT drag the releasing previous note ------------------
@@ -295,15 +372,21 @@ gl.mono = True
 gl.note_on(43)
 old = list(gl.voices[43])
 before = old[0].bend.value
-gl.note_on(46)                       # step UP a minor third
+gl.note_on(46)  # step UP a minor third
 after = old[0].bend
-ck(not hasattr(after, "value"),
-   "a stolen note's bend must be FROZEN to a plain number, not left on the "
-   "shared graph the glide is about to move")
-ck(abs(after - before) < 1e-9,
-   "the frozen tail must hold exactly where it was: %r -> %r" % (before, after))
-ck(gl.voices[46][0].bend is gl._bend,
-   "the NEW note must still ride the live shared bend and glide normally")
+ck(
+    not hasattr(after, "value"),
+    "a stolen note's bend must be FROZEN to a plain number, not left on the "
+    "shared graph the glide is about to move",
+)
+ck(
+    abs(after - before) < 1e-9,
+    "the frozen tail must hold exactly where it was: %r -> %r" % (before, after),
+)
+ck(
+    gl.voices[46][0].bend is gl._bend,
+    "the NEW note must still ride the live shared bend and glide normally",
+)
 ck(gl._glide.a < 0, "...gliding UP into 46, i.e. starting flat")
 
 # with no portamento nothing is frozen -- the tail keeps vibrato and wheel
@@ -312,9 +395,11 @@ nog.mono = True
 nog.note_on(43)
 old2 = list(nog.voices[43])
 nog.note_on(46)
-ck(old2[0].bend is nog._bend,
-   "glide_time 0 must leave the tail on the shared bend -- there is no drag "
-   "to prevent, and freezing would needlessly kill its vibrato")
+ck(
+    old2[0].bend is nog._bend,
+    "glide_time 0 must leave the tail on the shared bend -- there is no drag "
+    "to prevent, and freezing would needlessly kill its vibrato",
+)
 
 # the per-note glide override counts as portamento too
 ov = SubtractiveSynth(synthio.Synthesizer(), Patch(detune=1.0, glide_time=0.0))
@@ -322,8 +407,52 @@ ov.mono = True
 ov.note_on(43)
 old3 = list(ov.voices[43])
 ov.note_on(46, glide=0.3)
-ck(not hasattr(old3[0].bend, "value"),
-   "note_on(glide=...) must freeze the tail even when glide_time is 0")
+ck(
+    not hasattr(old3[0].bend, "value"),
+    "note_on(glide=...) must freeze the tail even when glide_time is 0",
+)
+
+# --- mono is a PATCH field, and survives a round trip --------------------
+# It used to be a live-only attribute, so a mono lead saved and reloaded
+# came back polyphonic -- with its glide_time intact but inert, since
+# glide does nothing in poly. Half of a coupled pair was being stored.
+
+lead = SubtractiveSynth(synthio.Synthesizer(), Patch(detune=1.0, glide_time=0.2))
+lead.mono = True
+saved = lead.save_patch()
+ck(saved.mono is True, "save_patch() must record mono; got %r" % (saved.mono,))
+back = SubtractiveSynth(synthio.Synthesizer(), Patch.from_dict(saved.to_dict()))
+ck(back.mono is True, "a saved mono lead must reload mono; got %r" % (back.mono,))
+back.note_on(48)
+back.note_on(60)
+ck(back._glide.a != 0, "reloaded mono lead must actually glide")
+
+# explicitly poly round-trips as poly
+poly = SubtractiveSynth(synthio.Synthesizer(), Patch(detune=1.0))
+ck(poly.mono is False, "SubtractiveSynth defaults poly")
+ck(poly.save_patch().mono is False, "an explicit False must be stored")
+
+# --- the class default must win when the patch does not say -------------
+# Patch.mono is None ("unspecified"). Resolving that to False rather than
+# to the style's own default would load every pre-existing 303 patch as
+# polyphonic and silently stop it being a 303.
+ck(Patch().mono is None, "Patch.mono should default to None, not a bool")
+
+bass = BasslineSynth(synthio.Synthesizer(), Patch(synth_type="bassline"))
+ck(
+    bass.mono is True,
+    "a patch with no mono key must leave BasslineSynth monophonic; got %r" % (bass.mono,),
+)
+
+# ...but an explicit False in the patch still overrides the class
+odd = BasslineSynth(synthio.Synthesizer(), Patch(synth_type="bassline", mono=False))
+ck(odd.mono is False, "an explicit patch mono=False must override the style")
+
+# and mono stays OUT of _PARAMS: structural, like the fx_*_on switches
+ck(
+    "mono" not in SubtractiveSynth._PARAMS,
+    "mono must not be in _PARAMS -- a CC should not flip mono/poly mid-phrase",
+)
 
 if fails:
     print("FAILURES (%d):" % len(fails))
