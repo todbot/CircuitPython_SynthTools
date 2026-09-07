@@ -7,9 +7,7 @@
 # Subclasses override _recompile() / _decompile() and _make_notes(), and
 # extend _PARAMS.
 #
-# Requires CircuitPython 10+
-#
-# --- two ideas run through this file ---------------------------------
+# Things to note:
 #
 # 1. THE PATCH IS NOT LIVE STATE. A Patch is inert JSON-able data. It is
 #    read once by _recompile() and then left alone -- turning a knob does
@@ -92,10 +90,10 @@ class Synth:
     #:     lead.mono = True
     #:     lead.glide_time = 0.08
     #:
-    #: Glide is meaningless in poly -- one shared bend would drag every
-    #: sounding voice -- so it is only applied while this is set.
+    #: Glide is defined as meaningless in poly -- one shared bend would drag
+    #: every sounding voice -- so it is only applied while this is set.
     #:
-    #: This is the STYLE's default. ``Patch.mono`` overrides it per patch
+    #: 'mono' is a synth STYLE's default. ``Patch.mono`` overrides it per patch
     #: (``None`` there means "leave the style's default alone"), and
     #: ``save_patch()`` writes back whatever is live, so a mono lead
     #: survives a save/load round trip along with its ``glide_time``.
@@ -105,16 +103,14 @@ class Synth:
     #: accident.
     mono = False
 
-    # The cutoff bus can now be driven below zero -- a downward fenv_amount,
-    # a negative filt_vel, a big filt_lfo_amount -- none of which was
-    # reachable when the cutoff was just a scalar. So it is clamped, in one
+    # The cutoff bus can be driven below zero -- a downward fenv_amount,
+    # a negative filt_vel, a big filt_lfo_amount.  So it is clamped, in one
     # MID block, since the middle of three values is exactly a clamp.
     #
-    # A negative Biquad.frequency does NOT raise or crash (measured on
-    # CircuitPython 10.3.0-alpha.3 / rp2040), so this is defensive rather
-    # than mandatory: what such a filter *sounds* like is undefined, and a
-    # downward sweep hitting 0 Hz is an ordinary patch, not an edge case.
-    # Cost is one shared block plus one per modulated voice.
+    # A negative Biquad.frequency does NOT raise or crash, so this is defensive
+    # and can prevent some glitching: what such a filter *sounds* like is
+    # undefined. A ownward sweep hitting 0 Hz is an ordinary patch, so it
+    # should work. Cost is one shared block plus one per modulated voice.
     FILT_F_MIN = 20.0
     FILT_F_MAX = 20000.0
 
@@ -536,6 +532,24 @@ class Synth:
             penv = self._penvs.pop(midi_note, None)
             if penv is not None:
                 self._penv.start_release(penv)
+            # Freeze the bend on the way out, for the same reason note_on()
+            # freezes the notes it steals -- but this covers the case that
+            # one cannot see. Releasing pops the note from self.voices while
+            # it is still audible, so a later glide, aiming the SHARED bend
+            # at the next note's starting pitch, drags this tail along with
+            # it. Measured on rp2040: playing 48, releasing it, then gliding
+            # to 36 threw the still-ringing 48 up to midi 57.9 before it
+            # slid back -- a pitch above both notes, and the loudest thing
+            # present if the new note has any attack at all.
+            #
+            # Guarded on glide_time so a tail keeps its vibrato when there
+            # is no portamento to drag it. note_on()'s own freeze still
+            # matters and is not redundant: it uses the per-note `glide`
+            # override, which can be non-zero while glide_time is 0.
+            if self.mono and self._glide_time:
+                for n in notes:
+                    b = n.bend
+                    n.bend = getattr(b, "value", b)
             self.synthio.release(notes)
 
     def all_notes_off(self):

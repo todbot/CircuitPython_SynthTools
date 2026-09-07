@@ -12,7 +12,7 @@ import board
 import keypad
 import synthio
 
-SAMPLE_RATE = 44100
+SAMPLE_RATE = 22050
 CHANNEL_COUNT = 2
 BUFFER_SIZE = 2048
 

@@ -454,6 +454,38 @@ ck(
     "mono must not be in _PARAMS -- a CC should not flip mono/poly mid-phrase",
 )
 
+# --- a RELEASED tail must not be dragged by the next glide ---------------
+# Measured on rp2040 before this was fixed: play 48, note_off it, glide to
+# 36, and the still-ringing 48 was thrown up to midi 57.9 -- above both
+# notes -- before sliding back. note_on()'s steal-freeze cannot catch it,
+# because note_off() has already popped it out of self.voices.
+seq = SubtractiveSynth(synthio.Synthesizer(), Patch(detune=1.0, glide_time=0.3))
+seq.mono = True
+seq.note_on(48)
+tail = list(seq.voices[48])[0]
+seq.note_off(48)  # what a sequencer loop does first
+ck(
+    not hasattr(tail.bend, "value"),
+    "note_off must freeze the bend of a note it releases, or a later glide "
+    "drags the still-sounding tail",
+)
+frozen = tail.bend
+seq.note_on(36)  # aims the shared bend at +1.0
+ck(tail.bend == frozen, "a released tail's pitch must not move when the next note glides")
+ck(seq._glide.a != 0, "...while the new note still glides normally")
+
+# with no portamento there is nothing to drag, so keep the tail's vibrato
+nofz = SubtractiveSynth(synthio.Synthesizer(), Patch(detune=1.0, glide_time=0.0))
+nofz.mono = True
+nofz.note_on(48)
+t2 = list(nofz.voices[48])[0]
+nofz.note_off(48)
+ck(
+    hasattr(t2.bend, "value"),
+    "glide_time 0: leave the tail on the shared bend, freezing would only "
+    "cost it vibrato for no benefit",
+)
+
 if fails:
     print("FAILURES (%d):" % len(fails))
     for f in fails:
