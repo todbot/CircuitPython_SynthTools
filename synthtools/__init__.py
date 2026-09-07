@@ -25,16 +25,8 @@ Importing
 ---------
 
 Names are resolved LAZILY: ``from synthtools import Patch`` imports
-``synthtools.patch`` and nothing else. Only the styles you actually name get
-loaded, so adding a synth style to this library costs nothing to anyone who
-does not use it.
-
-That matters on a microcontroller. Re-exporting eagerly (the ordinary
-desktop pattern of ``from .bassline_synth import BasslineSynth`` at module
-level) pulled in EVERY module on any touch of the package, measured at
-52,784 bytes of a Pico's ~137 KB free RAM, and it could not be dodged from
-the call site: importing a submodule runs this file first either way. Do not
-reintroduce eager re-exports here.
+``synthtools.patch`` and nothing else. Adding a tool to this library costs
+nothing to anyone who does not use it.
 
 Anything not listed below is still importable by its module path::
 
