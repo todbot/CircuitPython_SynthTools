@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: MIT
 """Run a snippet on a CircuitPython board over the serial REPL.
 
-    python3 cpy.py snippet.py [--port /dev/tty.usbmodem11201] [--timeout 20]
-    echo "print(1+1)" | python3 cpy.py -
+    python3 run_on_device.py snippet.py [--port /dev/tty.usbmodem11201] [--timeout 20]
+    echo "print(1+1)" | python3 run_on_device.py -
 
 Uses the raw REPL (ctrl-A), so the board's own code.py stays untouched on
 disk; it is only interrupted for the duration. Exits back to the friendly

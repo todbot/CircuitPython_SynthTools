@@ -138,6 +138,34 @@ explicitly.
 mutes the mixer while it runs: it is checking the block graph, not listening.
 180 s is not generous: the test sleeps its way through real envelope times.
 
+`test_display_cost.py` is the second file in this tier and answers a different
+question: what a displayio UI costs on a small mono OLED. It needs `synthtools/`
+but not `synth_setup.py`, and runs no audio at all, so nothing it measures can
+be masked by or blamed on the synth. Its I2C pins are declared at the top for
+the pico_test_synth wiring; change them for another board. It is mostly probes,
+because the numbers move with the build, the bus speed and the panel. The
+shapes it exists to establish, measured on 10.3.0-alpha.3 / rp2040 at 200 MHz
+with the panel on I2C at 1 MHz:
+
+| probe | answer |
+|---|---|
+| what does refresh cost scale with? | dirty **bytes**, ~0.03 ms each, plus ~0.6 ms fixed per area. A dirty rect's bytes are its width times its height rounded up to the panel's 8-row pages |
+| how long is a full 128x64 frame? | **~31 ms**, not the ~9.5 ms quoted in older comments here and in pico_test_synth. No full repaint fits an 11.6 ms audio deadline |
+| `bitmap_label` vs `adafruit_display_text.label` | label assigns text faster (2.5 ms against 4.2) but is a TileGrid that dirties one area per changed **glyph** and costs *more* RAM (1398 bytes against 1124). It loses on both counts |
+| can scattered changes be collapsed into one full frame? | no; reassigning `display.root_group` does not mark anything dirty |
+| does `refresh()` decline back-to-back? | no, `target_frames_per_second` defaults to `None` and there is no rate limit, so a UI may clear a dirty flag on the strength of it |
+
+The consequence for anyone laying out a UI is that **width is the lever, not
+element count**. An 8-character `terminalio` label is a 48x16 box, ~96 bytes,
+~5 ms; a 6-pixel-wide gauge is 18 bytes and under 1 ms. That is why the whole
+12-gauge `GaugeCluster` repaints in 6.8 ms, less than a single row of text, and
+it is the measurement behind the old rule of thumb that no element should be
+wider than half the screen. String formatting (~0.05 ms) and vectorio geometry
+(~0.04 ms) are free beside a single label write.
+
+`GaugeCluster` is the only display code `synthtools` itself ships, and section 6
+is the only coverage it has.
+
 Anything that only needs `synthio` (the arithmetic and behaviour probes below)
 can be run as a standalone snippet through `run_on_device.py` with **no files
 copied to the drive at all**. Prefer that when the question is about synthio
