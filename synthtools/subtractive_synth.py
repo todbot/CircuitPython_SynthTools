@@ -56,12 +56,12 @@ class SubtractiveSynth(Synth):
         # fmt: off
         n1 = synthio.Note(f, waveform=random_phase_wave(self._wave_name),
                           envelope=self._env,
-                          amplitude=amp * 0.625 if detuned else amp,
+                          amplitude=amp * 0.666 if detuned else amp,
                           filter=self._make_filter(), bend=self._bend_cur)
         if detuned:
             n2 = synthio.Note(f * self._detune,
                               waveform=random_phase_wave(self._wave_name),
-                              envelope=self._env, amplitude=amp * 0.375,
+                              envelope=self._env, amplitude=amp * 0.666, #0.375,
                               filter=self._make_filter(), bend=self._bend_cur)
             return (n1, n2)
         return (n1,)
