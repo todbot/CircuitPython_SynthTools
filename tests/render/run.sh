@@ -36,9 +36,13 @@ fi
 OUT=tests/render/out
 mkdir -p "$OUT"
 
+echo "check: Wavetable.set_wave_pos() correctness"
+"$MP" tests/render/check_wavetable.py --wave-lib "$WAVE_LIB"
+
+echo
 echo "render: $MP"
 "$MP" tests/render/render_chords.py --wave-lib "$WAVE_LIB" --outdir "$OUT" "$@"
 
 echo
 echo "analyze: $(command -v python3)"
-python3 tests/render/analyze_renders.py --outdir "$OUT"
+python3 tests/render/analyze_renders.py --outdir "$OUT" --max-shape-thdn-db -50

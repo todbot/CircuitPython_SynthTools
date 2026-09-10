@@ -9,6 +9,8 @@
 # wave_pos morphs already-sounding notes live: the lerp writes into the one
 # buffer synthio is reading from. O(1) in polyphony.
 
+import gc
+
 import synthio
 
 from .synth import Synth
@@ -56,6 +58,19 @@ class WavetableSynth(Synth):
     from the main loop to actually move it.
     """
 
+    # synthio's mix bus soft-limits above +-28000 and a full-scale wavetable
+    # note is already ~0.5 FS, so undivided polyphony compresses chords into
+    # that limiter. Scale each voice down; make the level back at
+    # mixer.voice[0].level. Read per note-on, so it can be changed on the
+    # class at any time (takes effect on the next note); like Synth.FILT_F_MAX.
+    WT_HEADROOM = 0.5
+
+    # Read at Wavetable construction (file change / wave_file setter), not per
+    # note-on. True (default) preloads the whole file (~32 KB for a 64x256
+    # table) so the wave-LFO sweep does zero file I/O; False reads each wave on
+    # demand, for a table too large for RAM. Set on the class before building.
+    WT_PRELOAD = True
+
     _PARAMS = Synth._PARAMS + (
         "wave_pos",
         "wave_file",
@@ -83,7 +98,14 @@ class WavetableSynth(Synth):
         super()._recompile()
         p = self.patch
         if p.wave_file != self._wt_path:  # heavy: only on file change
-            self._wavetable = Wavetable(p.wave_file)
+            # drop the old ~32 KB table before the new read: otherwise the peak
+            # is 2x table, one contiguous block that can MemoryError on a
+            # fragmented mid-session heap. A failed load then leaves
+            # self._wavetable None (needs another wave_file write), which beats
+            # silently keeping a stale table under a silent 2x-RAM spike.
+            self._wavetable = None
+            gc.collect()
+            self._wavetable = Wavetable(p.wave_file, preload=self.WT_PRELOAD)
             self._wt_path = p.wave_file
         self._wave_pos = getattr(p, "wave_pos", 0)
         self._wavetable.set_wave_pos(self._wave_pos)
@@ -153,7 +175,7 @@ class WavetableSynth(Synth):
         f = synthio.midi_to_hz(midi_note)
         # fmt: off
         return (synthio.Note(f, waveform=self._wave, envelope=self._env,
-                             amplitude=velocity / 127,
+                             amplitude=velocity / 127 * self.WT_HEADROOM,
                              filter=self._make_filter(),
                              bend=self._bend_cur),)
         # fmt: on
@@ -198,9 +220,16 @@ class WavetableSynth(Synth):
         patch that has never touched this feature): a synth that never
         touches this feature pays nothing whether update() is called every
         frame or never called at all. When active, a second guard skips
-        Wavetable.set_wave_pos() (real WAV file reads plus a ulab lerp)
-        unless the position moved by more than WAVE_LFO_EPS since the last
-        write.
+        Wavetable.set_wave_pos() unless the position moved by more than
+        WAVE_LFO_EPS since the last write; each write it does make is a
+        ~1 ms in-place ulab blend into the shared buffer (no file I/O once
+        the table is preloaded).
+
+        WAVE_LFO_EPS does NOT bound the call rate at ordinary sweep rates: a
+        fast sweep crosses it every loop. If that ~1 ms is too much CPU on a
+        given rig, throttle it in the caller's loop (a longer time.sleep(),
+        as synthtools_wavetable_chords.py does), not here: a wall-clock guard
+        inside update() would starve a genuinely fast sweep and sound chunky.
         """
         if self._wave_pos_max <= self._wave_pos:
             return
@@ -237,7 +266,9 @@ class WavetableSynth(Synth):
     @wave_file.setter
     def wave_file(self, v):
         if v != self._wt_path:  # reopens file; next note-on uses it
-            self._wavetable = Wavetable(v)
+            self._wavetable = None  # free the old table first (see _recompile)
+            gc.collect()
+            self._wavetable = Wavetable(v, preload=self.WT_PRELOAD)
             self._wt_path = v
             self._wavetable.set_wave_pos(self._wave_pos)
             self._wave = self._wavetable.waveform

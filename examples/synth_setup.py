@@ -5,6 +5,8 @@
 # part of todbot circuitpython synthio tutorial
 # 10 Feb 2025 - @todbot / Tod Kurt
 #
+import sys
+
 import analogio
 import audiobusio
 import audiomixer
@@ -15,6 +17,11 @@ import synthio
 SAMPLE_RATE = 22050
 CHANNEL_COUNT = 2
 BUFFER_SIZE = 2048
+if sys.platform == "RP2040":
+    SAMPLE_RATE = 22050
+    CHANNEL_COUNT = 1
+    BUFFER_SIZE = 4096
+
 
 # what we have plugged into the breadboard or pico_test_synth
 button_pins = (board.GP28,)

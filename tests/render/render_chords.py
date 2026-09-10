@@ -115,12 +115,12 @@ SPREAD = {3: (31, 50, 70), 6: (26, 43, 58, 71, 83, 94)}
 def case(cid, group, notes, note_amp=1.0, wt_scale=1.0, mixer_level=0.25,
          sr=44100, ch=1, wave_file=DEFAULT_WT, wave_pos=WAVE_POS,
          filt_type=None, filt_q=1.1, env=None, raw_notes=False,
-         through_mixer=False):
+         through_mixer=False, wt_headroom=None):
     return dict(id=cid, group=group, notes=list(notes), note_amp=note_amp,
                 wt_scale=wt_scale, mixer_level=mixer_level, sr=sr, ch=ch,
                 wave_file=wave_file, wave_pos=wave_pos, filt_type=filt_type,
                 filt_q=filt_q, env=list(env or STEADY_ENV), raw_notes=raw_notes,
-                through_mixer=through_mixer)
+                through_mixer=through_mixer, wt_headroom=wt_headroom)
 
 
 def build_cases():
@@ -175,6 +175,14 @@ def build_cases():
                        wt_scale=0.5, mixer_level=0.5, filt_type=None,
                        through_mixer=True))
 
+    # 7. the SHIPPED fix: real _make_notes path, WavetableSynth.WT_HEADROOM
+    #    1.0 (old) vs 0.5 (new) with the 0.25 -> 0.5 mixer makeup
+    for n in (3, 4, 5):
+        cs.append(case("ship_raw_n%d" % n, "ship", CHORDS[n],
+                       filt_type=None, wt_headroom=1.0, mixer_level=0.25))
+        cs.append(case("ship_fixed_n%d" % n, "ship", CHORDS[n],
+                       filt_type=None, wt_headroom=0.5, mixer_level=0.5))
+
     return cs
 
 
@@ -187,6 +195,12 @@ def run_case(c):
         f0 = synthio.midi_to_hz(c["notes"][0])
         eng.press([synthio.Note(f0, waveform=syn._wave, amplitude=c["note_amp"])
                    for _ in c["notes"]])
+    elif c["wt_headroom"] is not None:
+        # exercise the shipped _make_notes path: no amplitude override
+        WavetableSynth.WT_HEADROOM = c["wt_headroom"]
+        for n in c["notes"]:
+            syn.note_on(n, 127)
+        WavetableSynth.WT_HEADROOM = 0.5
     else:
         for n in c["notes"]:
             syn.note_on(n, vel)

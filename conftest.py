@@ -14,4 +14,6 @@
 #     alongside their sibling modules, not run from this tree.
 #   - tests/hw/test_device.py needs a real synthio: it only runs on
 #     actual hardware (see tests/README.md).
-collect_ignore_glob = ["examples/*", "tests/hw/*"]
+#   - tests/render/* imports synthio/ulab and runs under a CircuitPython unix
+#     build via tests/render/run.sh, never pytest.
+collect_ignore_glob = ["examples/*", "tests/hw/*", "tests/render/*"]
