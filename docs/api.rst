@@ -82,6 +82,12 @@ Waves
 .. automodule:: synthtools.waves
     :members:
 
+Harmony
+=======
+
+.. automodule:: synthtools.harmony
+    :members:
+
 Arpeggiator
 ===========
 

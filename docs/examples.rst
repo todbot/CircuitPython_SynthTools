@@ -53,6 +53,16 @@ A bright DX-style FM bell using FMSynth, with a live fm_ratio / fm_index sweep
     :caption: examples/synthtools_fm_demo.py
     :linenos:
 
+Harmony demo
+------------
+
+Walk scales and play diatonic chords with harmony.Scale, cycling through a
+short chord progression
+
+.. literalinclude:: ../examples/synthtools_harmony_demo.py
+    :caption: examples/synthtools_harmony_demo.py
+    :linenos:
+
 
 
  

@@ -142,6 +142,8 @@ What's Included
   ``synthio.Note`` graphs (the engines above have their own portamento,
   via ``mono`` + ``glide_time``)
 * ``RollingAverage`` -- moving-average smoothing for noisy knob reads
+* ``Scale`` / ``chord`` -- scales and diatonic/chromatic chords for
+  mapping pads and MIDI onto pitch
 
 Documentation
 =============

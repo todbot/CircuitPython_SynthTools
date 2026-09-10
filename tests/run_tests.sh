@@ -41,6 +41,7 @@ if command -v python3 >/dev/null 2>&1; then
     run python3 tests/test_arpeggiator.py
     run python3 tests/test_paramset.py
     run python3 tests/test_param_scaler.py
+    run python3 tests/test_harmony.py
 else
     echo "python3 not found, skipping the CPython tier"
     status=1
@@ -57,6 +58,7 @@ if command -v micropython >/dev/null 2>&1; then
     run micropython tests/test_arpeggiator.py
     run micropython tests/test_paramset.py
     run micropython tests/test_param_scaler.py
+    run micropython tests/test_harmony.py
 else
     printf '\nmicropython not found, skipping the portability tier.\n'
     printf 'Install it to catch the MicroPython-only bugs: brew install micropython\n'
