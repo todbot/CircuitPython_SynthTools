@@ -53,3 +53,6 @@ tmp
 
 # not ready for tracking/CI yet
 docs/diagrams/
+
+# regenerable render-harness output (FINDINGS.md is tracked)
+tests/render/out/

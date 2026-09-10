@@ -16,17 +16,24 @@ python3 tests/test_wiring.py   # or run one directly
 micropython tests/test_wiring.py
 ```
 
-`tests/` is excluded from pre-commit (`exclude: 'docs/.*|tests/.*'` in
-`.pre-commit-config.yaml`), so these files are exempt from ruff **and** from
-the `reuse` hook; no SPDX headers needed here.
+`tests/` is excluded from pre-commit's `exclude: 'docs/.*|tests/.*'`, so these
+files are exempt from ruff. The `reuse` hook has `pass_filenames: false` and
+lints the whole tree regardless, so **every file here still needs an SPDX
+header**.
 
-## Three ways to test
+## Four ways to test
 
 | | interpreter | ulab backend | catches |
 |---|---|---|---|
 | numeric | CPython | real numpy | DSP/array behaviour, int16 range |
 | portability | MicroPython | pure-Python fallback | CPython-isms |
 | hardware | CircuitPython on device | real ulab | what synthio actually permits |
+| render | CircuitPython unix build + CPython | real ulab / real numpy | how a patch actually *sounds* (offline WAV) |
+
+The render tier is `tests/render/` (`sh tests/render/run.sh`): it renders the
+real synth classes to WAV with `audiocore.get_buffer` and measures peak / RMS /
+THD+N. It needs a `coverage`-variant unix build and is not run by CI. See
+`tests/render/README.md`.
 
 MicroPython is the only thing that catches the import and
 `__dict__` bugs that CPython silently permits.
