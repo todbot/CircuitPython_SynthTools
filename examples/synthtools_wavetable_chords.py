@@ -21,6 +21,10 @@
 # stereo / 2048 config (other platforms, and pico_test_synth.Hardware) it
 # misses ~10% of passes. So: big buffer, light main loop, or an rp2350.
 
+import microcontroller
+
+microcontroller.cpu.frequency = 200_000_000
+
 import time
 
 from synth_setup import knobA, knobB, mixer
@@ -30,19 +34,19 @@ from synthtools import Patch, WavetableSynth
 
 # fmt: off
 patch = Patch(name="wavetable pad", synth_type="wavetable",
-              wave_file="/wavetables/PLAITS02.WAV", wave_pos=0,
-              wave_lfo_rate=0.04, wave_lfo_shape="saw", wave_lfo_once=False,
+              wave_file="/wavetables/BRAIDS02.WAV",
+              wave_pos=0, wave_lfo_rate=0.04, wave_lfo_range=63,
+              #wave_lfo_shape="saw", wave_lfo_once=False,
               amp_env=[0.06, 0.0, 1.0, 0.3])
 # fmt: on
 
 wt = WavetableSynth(engine, patch)
-wt.wave_pos_max = wt.num_waves - 1
 
 progression = (
-    (45, 52, 57, 60, 64),  # Am
-    (41, 48, 53, 57, 60),  # Fmaj7
-    (48, 52, 55, 59, 62),  # Cmaj7
-    (43, 50, 55, 59, 64),  # G
+    (45, 52, 60, 64),  # Am, had 57
+    (41, 48, 57, 60),  # Fmaj7, had 53
+    (48, 52, 59, 62),  # Cmaj7, had 55
+    (43, 50, 59, 64),  # G, had 50
 )
 
 

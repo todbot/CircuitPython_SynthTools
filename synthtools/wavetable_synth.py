@@ -17,8 +17,6 @@ from .synth import Synth
 from .waves import ramp_wave, saw_wave
 from .wavetable import Wavetable
 
-# WAVE_LFO_EPS = 0.01  # below one audibly distinct step of wavetable morph
-
 
 class WavetableSynth(Synth):
     """Polyphonic wavetable synth: one Note per key, its waveform a
@@ -174,18 +172,6 @@ class WavetableSynth(Synth):
             self._wt_path = v
             self._wavetable.set_wave_pos(self._wave_pos)
             self._wave_pos_last_written = None
-
-    # @property
-    # def wave_pos_max(self):
-    #     """The ceiling of the wave-LFO sweep. At or below wave_pos the
-    #     sweep is off; above it, the LFO sweeps wave_pos -> wave_pos_max."""
-    #     return self._wave_pos_max
-
-    # @wave_pos_max.setter
-    # def wave_pos_max(self, v):
-    #     self._wave_pos_max = v
-
-    #     #self._recompute_eff_max()
 
     # @property
     # def wave_lfo_shape(self):
