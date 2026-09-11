@@ -16,28 +16,28 @@ synthio's mix-down (`shared-module/synthio/__init__.c` `synthio_mix_down_sample`
 
 | config                        | N | steady peak | attack peak | steady RMS | crest | rail samples | longest run |
 |-------------------------------|---|-------------|-------------|------------|-------|--------------|-------------|
-| filter OFF                    | 1 | 16382       | 16382       | 6703       | 2.44  | 0            | 0           |
-| filter OFF                    | 2 | 28028       | 28045       | 10996      | 2.55  | 0            | 0           |
-| filter OFF                    | 3 | 28160       | 28196       | 12473      | 2.26  | 0            | 0           |
-| filter OFF                    | 4 | 28247       | 28348       | 14546      | 1.94  | 0            | 0           |
-| filter OFF                    | 5 | 28339       | 28484       | 15532      | 1.82  | 0            | 0           |
-| filter OFF                    | 6 | 28410       | 28625       | 16121      | 1.76  | 0            | 0           |
-| stock LPF 2500/Q1.1           | 1 | 16382       | 16382       | 6788       | 2.41  | 0            | 0           |
-| stock LPF 2500/Q1.1           | 2 | 28033       | 28045       | 11154      | 2.51  | 0            | 0           |
-| stock LPF 2500/Q1.1           | 3 | 28167       | 28200       | 12705      | 2.22  | 0            | 0           |
-| stock LPF 2500/Q1.1           | 4 | 28259       | 28356       | 14813      | 1.91  | 0            | 0           |
-| stock LPF 2500/Q1.1           | 5 | 28350       | 28503       | 15894      | 1.78  | 0            | 0           |
-| stock LPF 2500/Q1.1           | 6 | 28371       | 28627       | 16647      | 1.70  | 0            | 0           |
-| stock patch (LPF + stock env) | 3 | 28080       | 28189       | 10495      | 2.68  | 0            | 0           |
-| stock patch (LPF + stock env) | 4 | 28154       | 28341       | 12418      | 2.27  | 0            | 0           |
-| stock patch (LPF + stock env) | 5 | 28227       | 28485       | 13480      | 2.09  | 0            | 0           |
+| filter OFF                    | 1 | 16281       | 16281       | 7803       | 2.09  | 0            | 0           |
+| filter OFF                    | 2 | 28044       | 28029       | 12664      | 2.21  | 0            | 0           |
+| filter OFF                    | 3 | 28060       | 28084       | 14446      | 1.94  | 0            | 0           |
+| filter OFF                    | 4 | 28135       | 28131       | 16827      | 1.67  | 0            | 0           |
+| filter OFF                    | 5 | 28197       | 28200       | 17180      | 1.64  | 0            | 0           |
+| filter OFF                    | 6 | 28251       | 28290       | 17845      | 1.58  | 0            | 0           |
+| stock LPF 2500/Q1.1           | 1 | 15841       | 15802       | 7861       | 2.01  | 0            | 0           |
+| stock LPF 2500/Q1.1           | 2 | 28035       | 28022       | 12803      | 2.19  | 0            | 0           |
+| stock LPF 2500/Q1.1           | 3 | 28049       | 28076       | 14665      | 1.91  | 0            | 0           |
+| stock LPF 2500/Q1.1           | 4 | 28143       | 28137       | 17192      | 1.64  | 0            | 0           |
+| stock LPF 2500/Q1.1           | 5 | 28204       | 28185       | 17567      | 1.61  | 0            | 0           |
+| stock LPF 2500/Q1.1           | 6 | 28271       | 28253       | 18214      | 1.55  | 0            | 0           |
+| stock patch (LPF + stock env) | 3 | 26570       | 28066       | 11818      | 2.25  | 0            | 0           |
+| stock patch (LPF + stock env) | 4 | 28061       | 28074       | 14114      | 1.99  | 0            | 0           |
+| stock patch (LPF + stock env) | 5 | 28110       | 28182       | 15029      | 1.87  | 0            | 0           |
 
 Wide non-harmonic voicings (slowest phase realignment):
 
 | N | steady peak | attack peak | crest |
 |---|-------------|-------------|-------|
-| 3 | 28192       | 28100       | 2.40  |
-| 6 | 28355       | 28317       | 1.85  |
+| 3 | 28120       | 28137       | 2.07  |
+| 6 | 28370       | 28311       | 1.68  |
 
 ## 2. Pre-limiter (notional) peak and required headroom
 
@@ -45,12 +45,12 @@ Each chord rendered provably-linear (wavetable scaled down), then scaled back. `
 
 | N | notional peak | x FS | H_needed                |
 |---|---------------|------|-------------------------|
-| 1 | 16382         | 0.50 | n/a (amp clamps at 1.0) |
-| 2 | 31024         | 0.95 | 0.90                    |
-| 3 | 44916         | 1.37 | 0.62                    |
-| 4 | 53992         | 1.65 | 0.52                    |
-| 5 | 63680         | 1.94 | 0.44                    |
-| 6 | 71112         | 2.17 | 0.39                    |
+| 1 | 16280         | 0.50 | n/a (amp clamps at 1.0) |
+| 2 | 32560         | 0.99 | 0.86                    |
+| 3 | 34350         | 1.05 | 0.82                    |
+| 4 | 42112         | 1.29 | 0.66                    |
+| 5 | 48680         | 1.49 | 0.58                    |
+| 6 | 54264         | 1.66 | 0.52                    |
 
 ## 3. Per-note path (resonance sweep, N=1)
 
@@ -58,18 +58,18 @@ Checks whether a resonant Biquad rails a single note before the mix-down (a sepa
 
 | filt_q | peak  | rail samples | crest |
 |--------|-------|--------------|-------|
-| 0.7    | 16382 | 0            | 2.45  |
-| 1.1    | 16382 | 0            | 2.41  |
-| 2.0    | 16382 | 0            | 2.39  |
-| 4.0    | 16382 | 0            | 2.37  |
-| 6.0    | 16382 | 0            | 2.36  |
+| 0.7    | 15634 | 0            | 2.02  |
+| 1.1    | 15841 | 0            | 2.01  |
+| 2.0    | 16382 | 0            | 2.07  |
+| 4.0    | 16382 | 0            | 2.06  |
+| 6.0    | 16382 | 0            | 2.06  |
 
 ## 4. Aliasing (rig 22050 Hz vs 44100 Hz)
 
 | sample rate | inharmonic energy | peak  | RMS   |
 |-------------|-------------------|-------|-------|
-| 44100       | 0.4%              | 28160 | 12473 |
-| 22050       | 0.2%              | 28163 | 12288 |
+| 44100       | 0.3%              | 28060 | 14446 |
+| 22050       | 0.3%              | 28081 | 13940 |
 
 Inharmonic fraction = spectral energy not near an integer multiple of a played fundamental (limiter IMD + any aliased partials), filter off. Both are tiny and 22050 is not worse, so aliasing is not contributing to the chord distortion.
 
@@ -81,37 +81,37 @@ Filter off, held chords (BRAIDS02 frame 4). The wavetable-scale and per-note-amp
 
 | mitigation                                | peak  | RMS  | dLoud dB | gain loss dB | shape THD+N dB | raw THD+N dB | lag |
 |-------------------------------------------|-------|------|----------|--------------|----------------|--------------|-----|
-| status quo (level 0.25)                   | 7040  | 3118 | +0.0     | -0.4         | -20.2          | -19.7        | 0   |
-| wavetable x0.5 (level 0.25)               | 5615  | 1627 | -5.7     | 0.0          | -69.4          | -66.6        | 0   |
-| wavetable x0.35 (level 0.25)              | 3930  | 1138 | -8.7     | 0.0          | -70.3          | -68.3        | 0   |
-| per-note amp x0.5 (level 0.25)            | 5615  | 1627 | -5.7     | 0.0          | -69.4          | -67.2        | 0   |
-| per-note amp /sqrt(N) (level 0.25)        | 6484  | 1878 | -4.4     | 0.0          | -69.1          | -66.4        | 0   |
-| level 0.5 only (control)                  | 14080 | 6236 | +6.0     | -0.4         | -20.2          | -19.7        | 0   |
-| wavetable x0.5 + level 0.5  (recommended) | 11231 | 3254 | +0.4     | 0.0          | -69.4          | -66.6        | 0   |
+| status quo (level 0.25)                   | 7015  | 3611 | +0.0     | -0.0         | -33.0          | -32.7        | 0   |
+| wavetable x0.5 (level 0.25)               | 4294  | 1816 | -6.0     | 0.0          | -70.0          | -67.2        | 0   |
+| wavetable x0.35 (level 0.25)              | 3006  | 1271 | -9.1     | 0.0          | -71.2          | -68.8        | 0   |
+| per-note amp x0.5 (level 0.25)            | 4294  | 1815 | -6.0     | 0.0          | -70.2          | -68.1        | 0   |
+| per-note amp /sqrt(N) (level 0.25)        | 4958  | 2097 | -4.7     | 0.0          | -70.0          | -67.3        | 0   |
+| level 0.5 only (control)                  | 14030 | 7223 | +6.0     | -0.0         | -33.0          | -32.7        | 0   |
+| wavetable x0.5 + level 0.5  (recommended) | 8589  | 3632 | +0.0     | 0.0          | -70.0          | -67.2        | 0   |
 
 ### N = 4
 
 | mitigation                                | peak  | RMS  | dLoud dB | gain loss dB | shape THD+N dB | raw THD+N dB | lag |
 |-------------------------------------------|-------|------|----------|--------------|----------------|--------------|-----|
-| status quo (level 0.25)                   | 7061  | 3636 | +0.0     | -0.6         | -17.8          | -17.2        | 0   |
-| wavetable x0.5 (level 0.25)               | 6752  | 1940 | -5.5     | 0.0          | -66.9          | -62.9        | 0   |
-| wavetable x0.35 (level 0.25)              | 4726  | 1357 | -8.6     | 0.0          | -67.9          | -64.3        | 0   |
-| per-note amp x0.5 (level 0.25)            | 6751  | 1940 | -5.5     | 0.0          | -66.8          | -63.3        | 0   |
-| per-note amp /sqrt(N) (level 0.25)        | 6751  | 1940 | -5.5     | 0.0          | -66.8          | -63.3        | 0   |
-| level 0.5 only (control)                  | 14123 | 7273 | +6.0     | -0.6         | -17.8          | -17.2        | 0   |
-| wavetable x0.5 + level 0.5  (recommended) | 13504 | 3880 | +0.6     | 0.0          | -66.9          | -62.9        | 0   |
+| status quo (level 0.25)                   | 7033  | 4206 | +0.0     | -0.2         | -24.1          | -23.6        | 0   |
+| wavetable x0.5 (level 0.25)               | 5265  | 2155 | -5.8     | 0.0          | -67.0          | -63.8        | 0   |
+| wavetable x0.35 (level 0.25)              | 3685  | 1508 | -8.9     | 0.0          | -68.1          | -65.0        | 0   |
+| per-note amp x0.5 (level 0.25)            | 5265  | 2155 | -5.8     | 0.0          | -67.3          | -64.5        | 0   |
+| per-note amp /sqrt(N) (level 0.25)        | 5265  | 2155 | -5.8     | 0.0          | -67.3          | -64.5        | 0   |
+| level 0.5 only (control)                  | 14067 | 8413 | +6.0     | -0.2         | -24.1          | -23.6        | 0   |
+| wavetable x0.5 + level 0.5  (recommended) | 10531 | 4311 | +0.2     | 0.0          | -67.0          | -63.8        | 0   |
 
 ### N = 5
 
 | mitigation                                | peak  | RMS  | dLoud dB | gain loss dB | shape THD+N dB | raw THD+N dB | lag |
 |-------------------------------------------|-------|------|----------|--------------|----------------|--------------|-----|
-| status quo (level 0.25)                   | 7084  | 3883 | +0.0     | -1.0         | -15.2          | -14.5        | 0   |
-| wavetable x0.5 (level 0.25)               | 7009  | 2145 | -5.2     | -0.0         | -40.9          | -40.9        | 0   |
-| wavetable x0.35 (level 0.25)              | 5573  | 1503 | -8.2     | 0.0          | -65.6          | -61.8        | 0   |
-| per-note amp x0.5 (level 0.25)            | 7009  | 2145 | -5.2     | -0.0         | -40.9          | -40.9        | 0   |
-| per-note amp /sqrt(N) (level 0.25)        | 7001  | 1920 | -6.1     | 0.0          | -61.6          | -59.8        | 0   |
-| level 0.5 only (control)                  | 14169 | 7766 | +6.0     | -1.0         | -15.2          | -14.5        | 0   |
-| wavetable x0.5 + level 0.5  (recommended) | 14018 | 4291 | +0.9     | -0.0         | -40.9          | -40.9        | 0   |
+| status quo (level 0.25)                   | 7049  | 4295 | +0.0     | -0.8         | -18.1          | -16.9        | 0   |
+| wavetable x0.5 (level 0.25)               | 6087  | 2331 | -5.3     | 0.0          | -65.4          | -61.4        | 0   |
+| wavetable x0.35 (level 0.25)              | 4261  | 1632 | -8.4     | 0.0          | -66.3          | -62.3        | 0   |
+| per-note amp x0.5 (level 0.25)            | 6087  | 2331 | -5.3     | 0.0          | -65.4          | -61.9        | 0   |
+| per-note amp /sqrt(N) (level 0.25)        | 5444  | 2085 | -6.3     | 0.0          | -65.2          | -62.2        | 0   |
+| level 0.5 only (control)                  | 14098 | 8590 | +6.0     | -0.8         | -18.1          | -16.9        | 0   |
+| wavetable x0.5 + level 0.5  (recommended) | 12175 | 4663 | +0.7     | 0.0          | -65.4          | -61.4        | 0   |
 
 ## 5b. Real `audiomixer.Mixer` vs the scalar model
 
@@ -119,8 +119,8 @@ The recommended `mixer.voice[0].level` 0.25 -> 0.5 makeup, rendered through an a
 
 | N | scalar-model peak | real-Mixer peak | RMS delta dB | real rail samples |
 |---|-------------------|-----------------|--------------|-------------------|
-| 4 | 13504             | 13504           | -0.00        | 0                 |
-| 6 | 14036             | 14036           | -0.00        | 0                 |
+| 4 | 10531             | 10531           | -0.00        | 0                 |
+| 6 | 13577             | 13577           | -0.00        | 0                 |
 
 ## 5c. The shipped fix (real `_make_notes`, no amplitude override)
 
@@ -128,12 +128,12 @@ The recommended `mixer.voice[0].level` 0.25 -> 0.5 makeup, rendered through an a
 
 | config                       | N | peak  | RMS  | THD+N dB | THD+N % |
 |------------------------------|---|-------|------|----------|---------|
-| WT_HEADROOM 1.00, level 0.25 | 3 | 7040  | 3118 | -20.2    | 9.78%   |
-| WT_HEADROOM 0.50, level 0.50 | 3 | 11231 | 3254 | -69.4    | 0.03%   |
-| WT_HEADROOM 1.00, level 0.25 | 4 | 7061  | 3636 | -17.8    | 12.84%  |
-| WT_HEADROOM 0.50, level 0.50 | 4 | 13503 | 3880 | -66.8    | 0.05%   |
-| WT_HEADROOM 1.00, level 0.25 | 5 | 7084  | 3883 | -15.2    | 17.36%  |
-| WT_HEADROOM 0.50, level 0.50 | 5 | 14018 | 4290 | -40.9    | 0.90%   |
+| WT_HEADROOM 1.00, level 0.25 | 3 | 7015  | 3611 | -33.0    | 2.25%   |
+| WT_HEADROOM 0.50, level 0.50 | 3 | 8588  | 3631 | -70.2    | 0.03%   |
+| WT_HEADROOM 1.00, level 0.25 | 4 | 7033  | 4206 | -24.1    | 6.24%   |
+| WT_HEADROOM 0.50, level 0.50 | 4 | 10531 | 4311 | -67.3    | 0.04%   |
+| WT_HEADROOM 1.00, level 0.25 | 5 | 7049  | 4295 | -18.1    | 12.43%  |
+| WT_HEADROOM 0.50, level 0.50 | 5 | 12174 | 4662 | -65.4    | 0.05%   |
 
 ## 6. Source wavetable levels
 
@@ -146,7 +146,7 @@ The recommended `mixer.voice[0].level` 0.25 -> 0.5 makeup, rendered through an a
 
 - **Applied:** `WavetableSynth.WT_HEADROOM = 0.5` (in `_make_notes`'s `amplitude`). Section 5c: a 3-4 note chord goes from ~10-13% THD+N to <0.1%, a worst-case 5-note from ~17% to ~0.9%, RMS within +1 dB. `examples/synthtools_wavetable_chords.py` pairs it with `mixer.voice[0].level` 0.5 (up from 0.25) as makeup and A/Bs the two on knobB. Someone doing dense 6+ note pads sets `WT_HEADROOM = 0.35` and `level` ~0.7.
 - **Scope of the numbers:** one wavetable (BRAIDS02), its full-scale frame (4), phase-aligned press: worst case on every axis. A mid-table frame or a de-tuned voicing distorts less.
-- Worst-case headroom (`H_needed` above): ~0.62 for 3 notes, ~0.52 for 4, ~0.44 for 5. `WT_HEADROOM` 0.5 clears 3-4; a 5+ note chord on the worst frame still just tips the knee (hence the 0.9%).
+- Worst-case headroom (`H_needed` above): ~0.82 for 3 notes, ~0.66 for 4, ~0.58 for 5. `WT_HEADROOM` 0.5 clears 3-4; a 5+ note chord on the worst frame still just tips the knee (hence the 0.9%).
 - **rp2040 caveat:** the knee (28000) is identical on every port, but the slope past it is steeper there (`MAX_CHANNELS` 24 vs this build's 14), so the residual on 5+ note chords is worse on hardware than 5c shows. Confirm on a board.
 - `mixer.voice[0].level` alone ("control" row) does not help: the limiter already acted upstream in synthio's int16 output. 5b confirms a real `audiomixer.Mixer` matches the scalar model, so the 0.5 makeup is safe.
 - `/sqrt(N)` would be cleaner still but needs every sounding note's `amplitude` rewritten at each note-on (O(polyphony), against the shared-block design); rejected.

@@ -21,6 +21,7 @@ for _i, _a in enumerate(_argv):
         sys.path.insert(0, _argv[_i + 1])
 sys.path.insert(0, ".")
 
+import audiocore  # noqa: E402
 import synthio  # noqa: E402
 
 from synthtools.patch import Patch  # noqa: E402
@@ -72,14 +73,24 @@ syn.wave_lfo_rate = 2.0
 ck(syn.wave_lfo_rate == 2.0, "wave_lfo_rate getter didn't return what was set")
 
 # --- update() actually moves the shared buffer ---------------------------
+# The LFO only advances while the engine actually renders (synthio blocks
+# tick during audiocore.get_buffer(), not on a bare .value read), so the
+# sweep needs a held note and the engine pumped between update() calls,
+# same as render_chords.py's render() loop.
 eng, syn = build(wave_pos=0)
 n = syn.num_waves
 eng, syn = build(wave_pos=0, wave_lfo_range=n - 1, wave_lfo_rate=5.0)
+syn.note_on(48)
 before = list(syn._wavetable.waveform)
 for _ in range(20):
+    audiocore.get_buffer(eng)
     syn.update()
 after = list(syn._wavetable.waveform)
-ck(before != after, "20 update() calls with a running sweep left the buffer unchanged")
+syn.note_off(48)
+ck(
+    before != after,
+    "20 update() calls (note held, engine pumped between each) left the buffer unchanged",
+)
 
 # --- note_on()/note_off() basic sanity, through the public API only ------
 eng, syn = build(wave_pos=0)
