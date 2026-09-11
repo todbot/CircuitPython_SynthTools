@@ -14,7 +14,6 @@ import gc
 import synthio
 
 from .synth import Synth
-from .waves import ramp_wave, saw_wave
 from .wavetable import Wavetable
 
 
@@ -30,9 +29,9 @@ class WavetableSynth(Synth):
     polyphony regardless of how many notes are held.
 
     An optional LFO can sweep the wavetable position from wave_pos up to
-    wave_pos + wave_pos_range. This affects all notes playing.
+    wave_pos + wave_lfo_range. This affects all notes playing.
 
-    Unlike every other modulation source in this libravry, this one cannot
+    Unlike every other modulation source in this library, this one cannot
     live in the synthio block graph (Note.waveform is a plain fixed
     buffer, not a block-driven parameter), so update() must be called
     from the main loop to actually move it.
@@ -54,13 +53,14 @@ class WavetableSynth(Synth):
     _PARAMS = Synth._PARAMS + (
         "wave_file",
         "wave_pos",
-        "wave_pos_range",
+        "wave_lfo_range",
         "wave_lfo_rate",
     )
 
     # class attrs: base __init__ calls _recompile() before subclass setup
     _wavetable = None
     _wt_path = None
+    _wave_lfo_mid = None
 
     def _recompile(self):
         super()._recompile()
@@ -80,24 +80,27 @@ class WavetableSynth(Synth):
         self._wave_lfo_range = getattr(p, "wave_lfo_range", 1)
         self._wave_pos = getattr(p, "wave_pos", 0)
 
-        wave_lfo = synthio.LFO(once=False, rate=lrate)
+        if self._wave_lfo_mid is None:
+            wave_lfo = synthio.LFO(once=False, rate=lrate)
+            # this is the min/max'd version of the wave_pos LFO
+            self._wave_lfo_mid = synthio.Math(
+                synthio.MathOperation.MID,
+                wave_lfo,  # a
+                0,  # b
+                self.num_waves - 1,
+            )  # c
+            self.synthio.blocks.append(self._wave_lfo_mid)
 
-        # this is the min/max'd version of the wave_pos LFO
-        self._wave_lfo_mid = synthio.Math(
-            synthio.MathOperation.MID,
-            wave_lfo,  # a
-            0,  # b
-            self.num_waves - 1,
-        )  # c
-        self.synthio.blocks.append(self._wave_lfo_mid)
-        self._wave = self._wavetable.waveform
+        self._wave = self._wavetable.waveform  # cache ref to the waveform
         self.recalculate_wave_lfo()
+        self.update()
 
     def _decompile(self):
         super()._decompile()
         self.patch.wave_file = self._wt_path
         self.patch.wave_pos = self._wave_pos
-        self.patch.wave_pos_width = self._wave_pos_width
+        self.patch.wave_lfo_range = self._wave_lfo_range
+        self.patch.wave_lfo_rate = self._wave_lfo_mid.a.rate
 
     def _make_notes(self, midi_note, velocity):
         self._last_velocity = velocity
@@ -169,9 +172,9 @@ class WavetableSynth(Synth):
             self._wavetable = None  # free the old table first (see _recompile)
             gc.collect()
             self._wavetable = Wavetable(v, preload=self.WT_PRELOAD)
+            self._wave = self._wavetable.waveform
             self._wt_path = v
             self._wavetable.set_wave_pos(self._wave_pos)
-            self._wave_pos_last_written = None
 
     # @property
     # def wave_lfo_shape(self):
