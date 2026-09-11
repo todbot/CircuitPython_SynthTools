@@ -39,6 +39,9 @@ mkdir -p "$OUT"
 echo "check: Wavetable.set_wave_pos() correctness"
 "$MP" tests/render/check_wavetable.py --wave-lib "$WAVE_LIB"
 
+echo "check: WavetableSynth correctness"
+"$MP" tests/render/check_wavetable_synth.py --wave-lib "$WAVE_LIB"
+
 echo
 echo "render: $MP"
 "$MP" tests/render/render_chords.py --wave-lib "$WAVE_LIB" --outdir "$OUT" "$@"

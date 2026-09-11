@@ -23,6 +23,13 @@ Built to diagnose `WavetableSynth` distortion on 3+ note chords; see
   THD+N proxy against a provably-linear reference render, writes `FINDINGS.md`
   and `metrics.json`.
 - `wavhdr.py` is a 44-byte PCM WAV reader/writer (`struct` only) shared by both.
+- **`check_wavetable.py`** and **`check_wavetable_synth.py`** are terse
+  pass/fail correctness checks (same `ck()`/exit-non-zero style as the
+  `tests/` tier), for `Wavetable.set_wave_pos()`'s lerp and
+  `WavetableSynth`'s own contract (`wave_pos`/`wave_lfo_range`/
+  `wave_lfo_rate`, `set_param()`, `save_patch()`/`load_patch()`)
+  respectively -- unlike `render_chords.py`/`analyze_renders.py`, which
+  measure sound quality, not correctness.
 
 `audiofilewriter` is deliberately **not** used: it is not compiled into the unix
 build, and it records via a real-time background pump the unix port does not
