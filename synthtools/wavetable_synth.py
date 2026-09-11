@@ -76,8 +76,8 @@ class WavetableSynth(Synth):
             self._wavetable = Wavetable(p.wave_file, preload=self.WT_PRELOAD)
             self._wt_path = p.wave_file
 
-        lrate = getattr(p, "wave_lfo_rate", 0.5)
-        self._wave_lfo_range = getattr(p, "wave_lfo_range", 1)
+        lrate = getattr(p, "wave_lfo_rate", 0)
+        self._wave_lfo_range = getattr(p, "wave_lfo_range", 0)
         self._wave_pos = getattr(p, "wave_pos", 0)
 
         if self._wave_lfo_mid is None:

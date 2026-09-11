@@ -34,7 +34,7 @@ from synthtools import Patch, WavetableSynth
 # fmt: off
 patch = Patch(name="wavetable scan", synth_type="wavetable",
               wave_file="/wavetables/PLAITS02.WAV",
-              wave_pos=10, wave_lfo_rate=0.3, wave_lfo_range=0)
+              wave_pos=0, wave_lfo_rate=0.3, wave_lfo_range=0)
 # fmt: on
 
 wt = WavetableSynth(engine, patch)
@@ -47,8 +47,8 @@ while True:
     wt.update()
     rate = rate_choices[rate_i]
     rate_i = int(time.monotonic() / 5 % len(rate_choices))
-    wt.wave_pos = (knobA.value / 65535) * num_waves
-    wt.wave_lfo_range = (knobB.value / 65535) * num_waves
+    # wt.wave_pos = (knobA.value / 65535) * num_waves
+    # wt.wave_lfo_range = (knobB.value / 65535) * num_waves
     wt.wave_lfo_rate = rate
     real_pos = wt._wave_lfo_mid.a.value  # delve into internals to see realtime pos
     print(
