@@ -17,16 +17,7 @@ from .synth import Synth
 from .waves import ramp_wave, saw_wave
 from .wavetable import Wavetable
 
-WAVE_LFO_EPS = 0.01  # below one audibly distinct step of wavetable morph
-WAVE_LFO_SHAPES = ("triangle", "saw")
-
-
-def _norm_wave_lfo_shape(v):
-    """Fold any case/unknown value to a valid _wave_lfos dict key, the
-    same safe-fallback shape as Synth's FILTER_MODES.get(p.filt_type);
-    a bad patch field must never KeyError _active_wave_lfo."""
-    v = str(v).lower()
-    return v if v in WAVE_LFO_SHAPES else "triangle"
+# WAVE_LFO_EPS = 0.01  # below one audibly distinct step of wavetable morph
 
 
 class WavetableSynth(Synth):
@@ -41,18 +32,9 @@ class WavetableSynth(Synth):
     polyphony regardless of how many notes are held.
 
     An optional LFO can sweep the wavetable position from wave_pos up to
-    wave_pos_max (wave_lfo_shape "triangle"/"saw", wave_lfo_once for a
-    one-shot sweep vs. a free-running one, wave_lfo_rate, and wave_lfo_vel
-    to scale the sweep's depth by note velocity). wave_lfo_shape only
-    matters in repeat mode: a one-shot sweep is a monotonic rise
-    regardless of shape, so "triangle" and "saw" sound identical when
-    wave_lfo_once is set. In "once" mode the sweep retriggers only when a
-    note starts from silence, like vib_delay's fade-in: there is one
-    shared wavetable buffer for the whole synth, so retriggering on every
-    note-on would yank already-sounding chord notes' wave position back to
-    the floor.
+    wave_pos + wave_pos_range. This affects all notes playing.
 
-    Unlike every other modulation source in this library, this one cannot
+    Unlike every other modulation source in this libravry, this one cannot
     live in the synthio block graph (Note.waveform is a plain fixed
     buffer, not a block-driven parameter), so update() must be called
     from the main loop to actually move it.
@@ -72,27 +54,15 @@ class WavetableSynth(Synth):
     WT_PRELOAD = True
 
     _PARAMS = Synth._PARAMS + (
-        "wave_pos",
         "wave_file",
-        "wave_pos_max",
+        "wave_pos",
+        "wave_pos_range",
         "wave_lfo_rate",
-        "wave_lfo_shape",
-        "wave_lfo_once",
-        "wave_lfo_vel",
     )
 
     # class attrs: base __init__ calls _recompile() before subclass setup
     _wavetable = None
     _wt_path = None
-    _wave_pos = 0
-    _wave_lfos = None  # dict {(shape, once): synthio.LFO}, built once
-    _wave_lfo_shape = "triangle"
-    _wave_lfo_once = False
-    _wave_pos_max = 0
-    _wave_lfo_vel = 0.0
-    _last_velocity = 127
-    _wave_pos_eff_max = 0
-    _wave_pos_last_written = None
 
     def _recompile(self):
         super()._recompile()
@@ -107,71 +77,36 @@ class WavetableSynth(Synth):
             gc.collect()
             self._wavetable = Wavetable(p.wave_file, preload=self.WT_PRELOAD)
             self._wt_path = p.wave_file
-        self._wave_pos = getattr(p, "wave_pos", 0)
-        self._wavetable.set_wave_pos(self._wave_pos)
-        self._wave = self._wavetable.waveform
 
-        # Four fixed LFOs, one per (shape, once) combination, built once and
-        # never replaced: synthio.LFO.waveform is read-only, so a shape/mode
-        # change is a dict-key selection, never a rebuild. None is reachable
-        # from a Note (waveform is a plain buffer, not a block), so all four
-        # have to be rooted here or they never tick.
-        #
-        # "triangle" repeat needs no buffer: synthio's default (waveform=
-        # None) is a bipolar -1..1 triangle, so scale/offset do the same
-        # half-swing shift filt_lfo/vib_lfo use to land it in 0..1.
-        #
-        # "triangle" once does NOT get that treatment. Measured on hardware
-        # (rp2040, CircuitPython 10.3.0-alpha.3), LFO(once=True) with the
-        # default waveform rises to ~0.96, then falls all the way to -1.0 and
-        # HOLDS THERE: it traces the whole bipolar triangle once and stops at
-        # its last sample, the trough. So once=True uses ramp_wave() for both
-        # shapes, measured to rise cleanly 0..1 and hold at the top.
-        #
-        # "saw" repeat has no default-waveform equivalent, the built-in shape
-        # always being a triangle, so it needs saw_wave().
-        #
-        # Consequence: "triangle" and "saw" are IDENTICAL in once mode, both
-        # the same monotonic rise holding at the top. Shape only matters in
-        # repeat, where triangle goes back down and saw snaps to the floor.
-        if self._wave_lfos is None:
-            self._wave_lfos = {
-                ("triangle", False): synthio.LFO(once=False, scale=0.5, offset=0.5),
-                ("triangle", True): synthio.LFO(waveform=ramp_wave(), once=True),
-                ("saw", False): synthio.LFO(waveform=saw_wave(), once=False),
-                ("saw", True): synthio.LFO(waveform=ramp_wave(), once=True),
-            }
-            for lfo in self._wave_lfos.values():
-                self.synthio.blocks.append(lfo)
-        self._wave_pos_max = getattr(p, "wave_pos_max", self._wave_pos)
-        self._wave_lfo_vel = getattr(p, "wave_lfo_vel", 0.0)
-        self._wave_lfo_shape = _norm_wave_lfo_shape(getattr(p, "wave_lfo_shape", "triangle"))
-        self._wave_lfo_once = bool(getattr(p, "wave_lfo_once", False))
-        rate = getattr(p, "wave_lfo_rate", 0.5)
-        for lfo in self._wave_lfos.values():  # keep every combo ready to switch to
-            lfo.rate = rate
-        self._wave_pos_last_written = None
-        self._recompute_eff_max()
+        lrate = getattr(p, "wave_lfo_rate", 0.5)
+        self._wave_lfo_range = getattr(p, "wave_lfo_range", 1)
+        self._wave_pos = getattr(p, "wave_pos", 0)
+
+        wave_lfo = synthio.LFO(once=False, rate=lrate)
+
+        # this is the min/max'd version of the wave_pos LFO
+        self._wave_lfo_mid = synthio.Math(
+            synthio.MathOperation.MID,
+            wave_lfo,  # a
+            0,  # b
+            self.num_waves - 1,
+        )  # c
+        self.synthio.blocks.append(self._wave_lfo_mid)
+        self._wave = self._wavetable.waveform
+        self.recalculate_wave_lfo()
 
     def _decompile(self):
         super()._decompile()
         self.patch.wave_file = self._wt_path
         self.patch.wave_pos = self._wave_pos
-        self.patch.wave_pos_max = self._wave_pos_max
-        self.patch.wave_lfo_rate = self._active_wave_lfo.rate
-        self.patch.wave_lfo_shape = self._wave_lfo_shape
-        self.patch.wave_lfo_once = self._wave_lfo_once
-        self.patch.wave_lfo_vel = self._wave_lfo_vel
+        self.patch.wave_pos_width = self._wave_pos_width
 
     def _make_notes(self, midi_note, velocity):
         self._last_velocity = velocity
-        self._recompute_eff_max()
-        # Retrigger only when starting from silence, the same rule
-        # Synth.note_on() applies to _vib_fade: there is one shared waveform
-        # buffer for the whole synth, so retriggering on every note-on would
-        # yank already-sounding chord notes' wave position back to the floor.
-        if self._wave_lfo_once and not self.voices:
-            self._active_wave_lfo.retrigger()
+
+        # if self._wave_lfo_once and not self.voices:
+        #    self._wave_lfo_mid.a.retrigger()
+
         f = synthio.midi_to_hz(midi_note)
         # fmt: off
         return (synthio.Note(f, waveform=self._wave, envelope=self._env,
@@ -180,84 +115,51 @@ class WavetableSynth(Synth):
                              bend=self._bend_cur),)
         # fmt: on
 
-    @property
-    def _active_wave_lfo(self):
-        return self._wave_lfos[(self._wave_lfo_shape, self._wave_lfo_once)]
-
-    def _gain(self, velocity):
-        """1.0 = full sweep depth. wave_lfo_vel scales toward velocity/127,
-        the same shape as Synth._voice_fenv_gain()'s fenv_vel."""
-        if not self._wave_lfo_vel:
-            return 1.0
-        return 1.0 - self._wave_lfo_vel + self._wave_lfo_vel * (velocity / 127.0)
-
-    def _recompute_eff_max(self):
-        """Last-note-wins sweep endpoint. There is exactly one shared
-        waveform buffer for the whole synth, so unlike fenv_vel this
-        cannot be a per-voice block: it's Python state, recomputed at
-        every note-on and by any setter that could change the answer."""
-        gain = self._gain(self._last_velocity)
-        self._wave_pos_eff_max = self._wave_pos + (self._wave_pos_max - self._wave_pos) * gain
-        # "off" is wave_pos_max <= wave_pos, not just ==: the sweep runs
-        # wave_pos -> wave_pos_max, so a ceiling at or below the floor has no
-        # sweep. <= rather than == also closes a footgun, since moving
-        # wave_pos alone would otherwise flip on an INVERTED sweep the moment
-        # it passed wave_pos_max rather than staying off.
-        #
-        # update()'s early-out never runs while this holds, so without this
-        # settle, disabling the sweep would leave the wavetable stranded
-        # wherever the LFO last left it. Guarded by the dedup field, so it
-        # only fires on the actual transition.
-        if self._wave_pos_max <= self._wave_pos and self._wave_pos_last_written != self._wave_pos:
-            self._wavetable.set_wave_pos(self._wave_pos)
-            self._wave_pos_last_written = self._wave_pos
-
     def update(self):
         """Push the wave-position LFO's current value into the shared
         Wavetable buffer. Call as often as possible from the main loop.
-
-        Cheap no-op when wave_pos_max <= wave_pos (the default, and any
-        patch that has never touched this feature): a synth that never
-        touches this feature pays nothing whether update() is called every
-        frame or never called at all. When active, a second guard skips
-        Wavetable.set_wave_pos() unless the position moved by more than
-        WAVE_LFO_EPS since the last write; each write it does make is a
-        ~1 ms in-place ulab blend into the shared buffer (no file I/O once
-        the table is preloaded).
-
-        WAVE_LFO_EPS does NOT bound the call rate at ordinary sweep rates: a
-        fast sweep crosses it every loop. If that ~1 ms is too much CPU on a
-        given rig, throttle it in the caller's loop (a longer time.sleep(),
-        as synthtools_wavetable_chords.py does), not here: a wall-clock guard
-        inside update() would starve a genuinely fast sweep and sound chunky.
         """
-        if self._wave_pos_max <= self._wave_pos:
-            return
-        t = self._active_wave_lfo.value
-        if t < 0.0:
-            t = 0.0
-        elif t > 1.0:
-            t = 1.0
-        pos = self._wave_pos + (self._wave_pos_eff_max - self._wave_pos) * t
-        last = self._wave_pos_last_written
-        if last is not None and abs(pos - last) < WAVE_LFO_EPS:
-            return
+        pos = self._wave_lfo_mid.value
         self._wavetable.set_wave_pos(pos)
-        self._wave_pos_last_written = pos
+
+    def recalculate_wave_lfo(self):
+        """Recompute wave_lfo scale & offset from pos and range"""
+        lfo = self._wave_lfo_mid.a  # .a is where the LFO lives
+        lscale = self._wave_lfo_range / 2
+        loffset = self.wave_pos + self._wave_lfo_range - lscale
+        lfo.scale = lscale
+        lfo.offset = loffset
 
     @property
     def wave_pos(self):
         """wave_pos is also the floor of the wave-LFO sweep: while the
         sweep is active, the next update() tick will move away from
         whatever this setter writes."""
-        return self._wave_pos
+        return self._wave_pos  # lfo_mid.a.offset
 
     @wave_pos.setter
     def wave_pos(self, v):
         self._wave_pos = v
-        self._wavetable.set_wave_pos(v)  # in-place: morphs sounding notes
-        self._wave_pos_last_written = None
-        self._recompute_eff_max()
+        self.recalculate_wave_lfo()
+
+    @property
+    def wave_lfo_range(self):
+        """Range of wave position LFO, in float wave indexes"""
+        return self._wave_lfo_range
+
+    @wave_lfo_range.setter
+    def wave_lfo_range(self, v):
+        self._wave_lfo_range = v
+        self.recalculate_wave_lfo()
+
+    @property
+    def wave_lfo_rate(self):
+        """Speed of the wave-position LFO, in Hz."""
+        return self._wave_lfo_mid.a.rate
+
+    @wave_lfo_rate.setter
+    def wave_lfo_rate(self, v):
+        self._wave_lfo_mid.a.rate = v
 
     @property
     def wave_file(self):
@@ -271,61 +173,51 @@ class WavetableSynth(Synth):
             self._wavetable = Wavetable(v, preload=self.WT_PRELOAD)
             self._wt_path = v
             self._wavetable.set_wave_pos(self._wave_pos)
-            self._wave = self._wavetable.waveform
             self._wave_pos_last_written = None
 
-    @property
-    def wave_pos_max(self):
-        """The ceiling of the wave-LFO sweep. At or below wave_pos the
-        sweep is off; above it, the LFO sweeps wave_pos -> wave_pos_max."""
-        return self._wave_pos_max
+    # @property
+    # def wave_pos_max(self):
+    #     """The ceiling of the wave-LFO sweep. At or below wave_pos the
+    #     sweep is off; above it, the LFO sweeps wave_pos -> wave_pos_max."""
+    #     return self._wave_pos_max
 
-    @wave_pos_max.setter
-    def wave_pos_max(self, v):
-        self._wave_pos_max = v
-        self._recompute_eff_max()
+    # @wave_pos_max.setter
+    # def wave_pos_max(self, v):
+    #     self._wave_pos_max = v
 
-    @property
-    def wave_lfo_rate(self):
-        """Speed of the wave-position LFO, in Hz."""
-        return self._active_wave_lfo.rate
+    #     #self._recompute_eff_max()
 
-    @wave_lfo_rate.setter
-    def wave_lfo_rate(self, v):
-        for lfo in self._wave_lfos.values():  # keep every combo ready to switch to
-            lfo.rate = v
+    # @property
+    # def wave_lfo_shape(self):
+    #     """ "triangle" or "saw", only distinguishable in repeat mode; see
+    #     the class docstring."""
+    #     return self._wave_lfo_shape
 
-    @property
-    def wave_lfo_shape(self):
-        """ "triangle" or "saw", only distinguishable in repeat mode; see
-        the class docstring."""
-        return self._wave_lfo_shape
+    # @wave_lfo_shape.setter
+    # def wave_lfo_shape(self, v):
+    #     self._wave_lfo_shape = _norm_wave_lfo_shape(v)  # pure dict-key selection, no rebuild
 
-    @wave_lfo_shape.setter
-    def wave_lfo_shape(self, v):
-        self._wave_lfo_shape = _norm_wave_lfo_shape(v)  # pure dict-key selection, no rebuild
+    # @property
+    # def wave_lfo_once(self):
+    #     """True: the sweep fires once per note-on (from silence) and
+    #     holds. False: it runs continuously."""
+    #     return self._wave_lfo_once
 
-    @property
-    def wave_lfo_once(self):
-        """True: the sweep fires once per note-on (from silence) and
-        holds. False: it runs continuously."""
-        return self._wave_lfo_once
+    # @wave_lfo_once.setter
+    # def wave_lfo_once(self, v):
+    #     self._wave_lfo_once = bool(v)  # pure dict-key selection, no rebuild
 
-    @wave_lfo_once.setter
-    def wave_lfo_once(self, v):
-        self._wave_lfo_once = bool(v)  # pure dict-key selection, no rebuild
+    # @property
+    # def wave_lfo_vel(self):
+    #     """0-1 sensitivity of the sweep's depth to note velocity. 0 =
+    #     uniform depth; 1.0 = depth tracks velocity/127, the same shape as
+    #     fenv_vel."""
+    #     return self._wave_lfo_vel
 
-    @property
-    def wave_lfo_vel(self):
-        """0-1 sensitivity of the sweep's depth to note velocity. 0 =
-        uniform depth; 1.0 = depth tracks velocity/127, the same shape as
-        fenv_vel."""
-        return self._wave_lfo_vel
-
-    @wave_lfo_vel.setter
-    def wave_lfo_vel(self, v):
-        self._wave_lfo_vel = v
-        self._recompute_eff_max()
+    # @wave_lfo_vel.setter
+    # def wave_lfo_vel(self, v):
+    #     self._wave_lfo_vel = v
+    #     #self._recompute_eff_max()
 
     @property
     def num_waves(self):
