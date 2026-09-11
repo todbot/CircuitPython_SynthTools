@@ -47,8 +47,8 @@ while True:
     wt.update()
     rate = rate_choices[rate_i]
     rate_i = int(time.monotonic() / 5 % len(rate_choices))
-    # wt.wave_pos = (knobA.value / 65535) * num_waves
-    # wt.wave_lfo_range = (knobB.value / 65535) * num_waves
+    wt.wave_pos = (knobA.value / 65535) * num_waves
+    wt.wave_lfo_range = (knobB.value / 65535) * num_waves
     wt.wave_lfo_rate = rate
     real_pos = wt._wave_lfo_mid.a.value  # delve into internals to see realtime pos
     print(
