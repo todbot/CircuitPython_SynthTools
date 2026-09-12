@@ -486,6 +486,24 @@ ck(
     "cost it vibrato for no benefit",
 )
 
+# --- BasslineSynth's own note_off() freeze, keyed on slide_time ----------
+# It never sets self._glide_time (note_on_step() always passes an explicit
+# per-note glide= override instead), so Synth.note_off()'s own guard is
+# always false here; BasslineSynth needs its OWN freeze against slide_time.
+bass_seq = BasslineSynth(synthio.Synthesizer(), Patch(synth_type="bassline", slide_time=0.3))
+bass_seq.note_on_step(48)
+bass_tail = list(bass_seq.voices[48])[0]
+bass_seq.note_off(48)  # what a step sequencer does before the next note_on
+ck(
+    not hasattr(bass_tail.bend, "value"),
+    "BasslineSynth.note_off() must freeze the bend of a note it releases, "
+    "even though self._glide_time is never set",
+)
+bass_frozen = bass_tail.bend
+bass_seq.note_on_step(36, slide=True)
+ck(bass_tail.bend == bass_frozen, "a released BasslineSynth tail must not move when the next step slides")
+ck(bass_seq._glide.a != 0, "...while the new note still glides normally")
+
 if fails:
     print("FAILURES (%d):" % len(fails))
     for f in fails:

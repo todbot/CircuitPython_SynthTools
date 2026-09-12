@@ -431,9 +431,9 @@ class BasslineSynth(Synth):
 
         note_on_step() always passes an explicit per-note glide= override
         (self._slide_time or 0.0), so Synth.note_on()'s
-        `secs = self._glide_time if glide is None else glide` never
+        ``secs = self._glide_time if glide is None else glide`` never
         consults self._glide_time for this class -- it stays 0.0, so
-        Synth.note_off()'s `if self.mono and self._glide_time:` guard never
+        Synth.note_off()'s ``if self.mono and self._glide_time:`` guard never
         fires here. Without this, a released tail keeps a LIVE reference to
         the shared bend graph and the next slide's _aim_glide() drags it
         along for the length of its release, the exact bug that guard

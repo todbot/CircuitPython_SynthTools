@@ -1,19 +1,15 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
 # SPDX-License-Identifier: MIT
 #
-# synthtools_bassline_demo.py -- acid bassline with synthtools BasslineSynth
+# synthtools_bassline_fx_demo.py -- acid bassline: BasslineSynth's owned
+# effects chain (extra filter stage, distortion, echo).
 #
 # Plays one 16-step pattern over and over, changing a single knob every few
 # bars and printing what it changed, so you can hear each one on its own.
-#
-# BasslineSynth is monophonic and takes the TB-303's two per-step flags:
-#
-#   slide   glide the pitch into this step from the one before
-#   accent  a louder, brighter, more resonant step
-#
-# Note a slide glides but still retriggers the envelopes; a real 303 ties
-# the two steps into one held note. Being monophonic, the synth steals its
-# own sounding voice, so the loop below never has to track what is playing.
+# One of three focused demos split out of a single, too-broad one; see
+# synthtools_bassline_filter_demo.py (filter/envmod/decay) and
+# synthtools_bassline_accent_demo.py (slide/accent) for the rest, including
+# why the patch fields below are set the way they are.
 #
 # BasslineSynth also owns a specialized effects chain (filter -> distortion
 # -> echo): an extra resonant filter stage, LOFI-mode distortion, and a
@@ -28,44 +24,23 @@ from synth_setup import synth as engine
 
 from synthtools import BasslineSynth, Patch
 
-# --- the patch ----------------------------------------------------------
-# The classic squelch is a big downward sweep from a bright starting point.
-# envmod is a FRACTION of filt_f, not a number of Hz, so the sweep tracks
-# the cutoff knob: 0.75 of 1200 Hz means the filter falls to 300 Hz, two
-# octaves. Judge envmod in OCTAVES at the cutoff it will actually sit at,
-# never in Hz: 0.2 of 1200 is only a third of an octave and you will not
-# hear it.
+# --- the patch: same acid preset as synthtools_bassline_filter_demo.py --
 patch = Patch(
     name="acid",
     synth_type="bassline",
-    wave="SAW",  # "SQU" is the 303's other switch position
+    wave="SAW",
     filt_type="LPF",
-    filt_f=1200,  # the PEAK the sweep starts from
-    filt_q=1.8,  # squelch lives here; push it up toward 3-4
+    filt_f=1200,
+    filt_q=1.8,
     envmod=0.75,
-    # THE TWO NUMBERS THAT DECIDE WHETHER YOU HEAR envmod AT ALL.
-    #
-    # fenv_attack is the filter FALL time, and it must be shorter than the
-    # gate (here 0.9 * a 115ms step = 104ms) or the sweep is cut off
-    # partway: at 0.28s it only got 23% of the way down, so envmod=0.75
-    # moved 0.74 octaves instead of 2.0, and envmod=0.2 moved 0.16; i.e.
-    # nothing. At 0.09s the sweep completes inside the note.
-    #
-    # The amp decay must be LONGER than that, so the note is still loud
-    # while the cutoff falls. Equal times sound like one gesture (a
-    # pluck), because loudness and brightness drop together and mask each
-    # other. Sustain 0 means every step plucks; there is no held part.
     amp_env=[0.001, 0.25, 0.0, 0.02],
-    fenv_attack=0.09,  # the FALL time (the sweep runs downward)
+    fenv_attack=0.09,
     fenv_release=0.05,
-    # 3 gives the fast drop and long tail that reads as "analog". At 1 the
-    # sweep is a straight line and sounds noticeably more synthetic.
     fenv_curve=3,
-    # what an accented step gets, on top of the above
     accent=0.6,
-    accent_cutoff=4000,  # Hz added at full accent
-    accent_q=0.8,  # resonance added at full accent
-    amp_level=0.75,  # un-accented level, so accents have room to be louder
+    accent_cutoff=4000,
+    accent_q=0.8,
+    amp_level=0.75,
     slide_time=0.09,
     transpose=0,
     # --- BasslineSynth's own effects chain, if this build has
@@ -82,7 +57,7 @@ patch = Patch(
     fx_drive=0.35,  # set_drive() maps 0..1; LOFI mode's own "drive" doesn't
     fx_drive_mix=0.0,
     fx_echo_on=True,
-    fx_delay_ms=231,  # an 8th note at 130 bpm: 60000/130/4*2, on the step grid
+    fx_delay_ms=273,  # an 8th note at 110 bpm: 60000/110/4*2, on the step grid
     fx_delay_mix=0.0,
     fx_delay_decay=0.35,  # feedback: how many repeats you hear
 )
@@ -123,49 +98,21 @@ PATTERN = (
     (43, True, False),
     (36, False, True),
     (36, False, False),
-    (51, True, False),
-    (48, False, False),
+    (29, True, False),  # the other slides go up; this one goes down
+    (36, False, False),  # back to the root, not a big jump: lets the down-slide land
     (39, False, True),
     (36, False, False),
     None,
     (34, False, False),
 )
 
-BPM = 130
+BPM = 110
 STEP = 60.0 / BPM / 4  # sixteenth notes
-# Long gate on purpose: the filter sweep only happens while the note is
-# held, so a short gate truncates it. 0.9 leaves the sweep (0.09s) room to
-# finish inside the note (0.104s).
 GATE = 0.9  # fraction of a step a note is held for
 
 # Each entry is (label, function), applied for BARS_PER_CHANGE bars each.
 BARS_PER_CHANGE = 2
 CHANGES = (
-    ("filt_f 1200, the resting cutoff", lambda: setattr(synth, "filt_f", 1200)),
-    ("filt_f 500, darker, and the sweep shrinks with it", lambda: setattr(synth, "filt_f", 500)),
-    ("filt_f 2500, brighter, and the sweep grows", lambda: setattr(synth, "filt_f", 2500)),
-    ("filt_f 1200 again", lambda: setattr(synth, "filt_f", 1200)),
-    ("envmod 0.2, barely any sweep", lambda: setattr(synth, "envmod", 0.2)),
-    ("envmod 1.0, sweeps all the way shut", lambda: setattr(synth, "envmod", 1.0)),
-    ("envmod 0.75", lambda: setattr(synth, "envmod", 0.75)),
-    ("filt_q 3.6, squelch", lambda: setattr(synth, "filt_q", 3.6)),
-    ("decay 0.03, sweep snaps shut, almost a click", lambda: setattr(synth, "decay", 0.03)),
-    (
-        "decay 0.30, longer than the gate, so it never finishes",
-        lambda: setattr(synth, "decay", 0.30),
-    ),
-    ("decay 0.09", lambda: setattr(synth, "decay", 0.09)),
-    ("accent 0.0, accented steps stop standing out", lambda: setattr(synth, "accent", 0.0)),
-    ("accent 1.0, and now they really do", lambda: setattr(synth, "accent", 1.0)),
-    ("accent 0.6", lambda: setattr(synth, "accent", 0.6)),
-    (
-        "slide_time 0.005, slides become almost instant",
-        lambda: setattr(synth, "slide_time", 0.005),
-    ),
-    ("slide_time 0.2, long, lazy slides", lambda: setattr(synth, "slide_time", 0.2)),
-    ("slide_time 0.09", lambda: setattr(synth, "slide_time", 0.09)),
-    ('wave "SQU", the other 303 switch position', lambda: setattr(synth, "wave", "SQU")),
-    ('wave "SAW"', lambda: setattr(synth, "wave", "SAW")),
     # --- distortion: fx_drive_mix is the switch, fx_drive is the amount ---
     ("fx_drive_mix 0.0, distortion built but silent", lambda: setattr(synth, "fx_drive_mix", 0.0)),
     ("fx_drive_mix 0.6, LOFI grit mixed in", lambda: setattr(synth, "fx_drive_mix", 0.6)),
@@ -182,14 +129,14 @@ CHANGES = (
         lambda: setattr(synth, "fx_delay_ms", 350),
     ),
     (
-        "fx_delay_ms 231, back on the 8th-note grid",
-        lambda: setattr(synth, "fx_delay_ms", 231),
+        "fx_delay_ms 273, back on the 8th-note grid",
+        lambda: setattr(synth, "fx_delay_ms", 273),
     ),
     ("fx_delay_decay 0.35", lambda: setattr(synth, "fx_delay_decay", 0.35)),
     ("fx_delay_mix 0.0, echo off", lambda: setattr(synth, "fx_delay_mix", 0.0)),
 )
 
-print("bassline demo: %d steps at %d bpm" % (len(PATTERN), BPM))
+print("bassline fx demo: %d steps at %d bpm" % (len(PATTERN), BPM))
 
 bar = 0
 while True:
