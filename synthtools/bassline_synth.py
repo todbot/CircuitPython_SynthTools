@@ -130,7 +130,7 @@ class BasslineSynth(Synth):
 
     # --- the owned effects chain: class attrs; see _build_fx() ----------
     FX_BUFFER_SIZE = 1024
-    FX_MAX_DELAY_MS = 1000.0  # buffer sizing only, not a knob; see fx_delay_ms
+    FX_MAX_DELAY_MS = 1000  # buffer sizing only, not a knob; see fx_delay_ms
     _fx_filter_stages = 0
     _fx_filter_mix = 1.0
     _fx_distortion_on = False

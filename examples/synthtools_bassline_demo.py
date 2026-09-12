@@ -14,6 +14,12 @@
 # Note a slide glides but still retriggers the envelopes; a real 303 ties
 # the two steps into one held note. Being monophonic, the synth steals its
 # own sounding voice, so the loop below never has to track what is playing.
+#
+# BasslineSynth also owns a specialized effects chain (filter -> distortion
+# -> echo): an extra resonant filter stage, LOFI-mode distortion, and a
+# tempo-related echo. The three fx_*_on/fx_filter_stages switches are
+# STRUCTURAL and set once below; only the LIVE knobs (fx_drive, fx_drive_mix,
+# fx_delay_ms, fx_delay_mix, fx_delay_decay) move during the demo.
 
 import time
 
@@ -69,15 +75,39 @@ patch = Patch(
     # own, so it follows the sweep and the accent with nothing to keep in
     # sync by hand: see fx_filter_stages in bassline_synth.py.
     fx_filter_stages=1,
+    # Distortion and echo, same chain, needing audiodelays too. Both exist
+    # from the start but sit at mix 0 -- silent, same as not being there --
+    # until the CHANGES rotation below brings each in on its own.
+    fx_distortion_on=True,
+    fx_drive=0.35,  # set_drive() maps 0..1; LOFI mode's own "drive" doesn't
+    fx_drive_mix=0.0,
+    fx_echo_on=True,
+    fx_delay_ms=231,  # an 8th note at 130 bpm: 60000/130/4*2, on the step grid
+    fx_delay_mix=0.0,
+    fx_delay_decay=0.35,  # feedback: how many repeats you hear
 )
+
+# audiodelays.Echo allocates its whole delay line up front, sized by
+# max_delay_ms (not fx_delay_ms), and needs it as an int: FX_MAX_DELAY_MS's
+# class default is 1000, which is 44100 bytes at this rig's 22050 Hz mono
+# and MemoryError'd here with ~112 KB free (other things -- the synth
+# graph, the extra filter stage, the distortion buffer -- are already
+# holding some of that). This demo never asks for more than 350 ms, so
+# cap the buffer there with room to spare, the same
+# set-on-the-subclass-before-constructing pattern as SubtractiveSynth's
+# FILT_F_MAX.
+BasslineSynth.FX_MAX_DELAY_MS = 500
 
 synth = BasslineSynth(engine, patch)
 
 try:
     mixer.voice[0].play(synth.output)  # replaces synth_setup's direct hookup
-    print("filter: 24 dB/octave (1 extra stage)")
-except ImportError:
-    print("no audiofilters in this build; 12 dB/octave, voice filter only")
+    print("fx chain: +1 filter stage (24 dB/oct), distortion, echo")
+except (ImportError, MemoryError) as e:
+    # _build_fx() is atomic: missing EITHER audiofilters or audiodelays, or
+    # failing to allocate the echo buffer, drops the whole chain, not just
+    # the piece that needed it.
+    print("%s -- falling back to the bare voice filter" % e)
     mixer.voice[0].play(synth.synthio)
 
 # --- the pattern --------------------------------------------------------
@@ -136,6 +166,27 @@ CHANGES = (
     ("slide_time 0.09", lambda: setattr(synth, "slide_time", 0.09)),
     ('wave "SQU", the other 303 switch position', lambda: setattr(synth, "wave", "SQU")),
     ('wave "SAW"', lambda: setattr(synth, "wave", "SAW")),
+    # --- distortion: fx_drive_mix is the switch, fx_drive is the amount ---
+    ("fx_drive_mix 0.0, distortion built but silent", lambda: setattr(synth, "fx_drive_mix", 0.0)),
+    ("fx_drive_mix 0.6, LOFI grit mixed in", lambda: setattr(synth, "fx_drive_mix", 0.6)),
+    ("fx_drive 0.8, same mix, more grit", lambda: setattr(synth, "fx_drive", 0.8)),
+    ("fx_drive_mix 0.0, distortion off again", lambda: setattr(synth, "fx_drive_mix", 0.0)),
+    # --- echo: fx_delay_mix is the switch, ms/decay shape the repeats -----
+    (
+        "fx_delay_mix 0.35, echo in, synced to an 8th note",
+        lambda: setattr(synth, "fx_delay_mix", 0.35),
+    ),
+    ("fx_delay_decay 0.6, repeats trail longer", lambda: setattr(synth, "fx_delay_decay", 0.6)),
+    (
+        "fx_delay_ms 350, off the grid, echoes drift against the pattern",
+        lambda: setattr(synth, "fx_delay_ms", 350),
+    ),
+    (
+        "fx_delay_ms 231, back on the 8th-note grid",
+        lambda: setattr(synth, "fx_delay_ms", 231),
+    ),
+    ("fx_delay_decay 0.35", lambda: setattr(synth, "fx_delay_decay", 0.35)),
+    ("fx_delay_mix 0.0, echo off", lambda: setattr(synth, "fx_delay_mix", 0.0)),
 )
 
 print("bassline demo: %d steps at %d bpm" % (len(PATTERN), BPM))

@@ -20,9 +20,9 @@ from synthtools import Patch, SubtractiveSynth
 from synthtools.harmony import DIATONIC_SHAPE_NAMES, Scale, note_name
 
 # fmt: off
-patch = Patch(name="harmony demo", wave="TRI",
+patch = Patch(name="harmony demo", wave="ATRI",
               amp_env=[0.01, 0.15, 0.5, 0.25],
-              filt_type="LPF", filt_f=2600, filt_q=0.7)
+              filt_type="LPF", filt_f=3600, filt_q=1.7)
 # fmt: on
 synth = SubtractiveSynth(engine, patch)
 
