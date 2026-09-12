@@ -43,6 +43,8 @@ class TrigSequencer:
         self.i = 0  # where in the step sequence we currently are
         self.playing = False
         self.drum_map = [0] * trig_count
+        self.step_millis = 0  # real value once bpm is set; update()/start() need it to exist
+        self.next_millis = 0
 
     @property
     def bpm(self):
@@ -59,8 +61,7 @@ class TrigSequencer:
         self.playing = True
 
     def stop(self):
-        """Stop sequencer, turning off any currently-sounding note"""
-        self.off_func(*self.held_note)
+        """Stop sequencer"""
         self.playing = False
         self.i = 0
 
@@ -69,7 +70,7 @@ class TrigSequencer:
 
     def set_pattern(self, pattern):
         for i in range(len(pattern)):
-            self.trigs[i] = pattern[i]
+            self.trigs[i][:] = pattern[i]  # copy elements, no new list alloc
 
     def update(self):
         """Update the sequencer. Call as frequently as possible"""
@@ -80,12 +81,12 @@ class TrigSequencer:
         delta_millis = now - self.next_millis
 
         if delta_millis >= 0:  # time to play
-            # print("                      delta_millis:", delta_millis)
-
             for t in range(self.trig_count):
                 if self.trigs[t][self.i] == 1:
                     self.on_func(t, self.drum_map[t])
 
             # prep for next step in sequence
             self.i = (self.i + 1) % self.step_count
-            self.next_millis = now + self.step_millis - delta_millis
+            self.next_millis += self.step_millis
+            if self.next_millis < now:  # a stall put us a whole step behind: resync
+                self.next_millis = now + self.step_millis

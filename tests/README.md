@@ -173,6 +173,13 @@ wider than half the screen. String formatting (~0.05 ms) and vectorio geometry
 `GaugeCluster` is the only display code `synthtools` itself ships, and section 6
 is the only coverage it has.
 
+`test_trig_sequencer_timing.py` is the third file in this tier: the
+`TrigSequencer` stall-recovery timing fix, checked against real
+`supervisor.ticks_ms()` jitter and a real `time.sleep()` stall rather than
+the fake, settable clock `tests/test_trig_sequencer.py` uses. Same shape as
+`test_display_cost.py` — needs `synthtools/`, not `synth_setup.py`, no
+audio — since a sequencer's timing has nothing to do with the mixer.
+
 Anything that only needs `synthio` (the arithmetic and behaviour probes below)
 can be run as a standalone snippet through `run_on_device.py` with **no files
 copied to the drive at all**. Prefer that when the question is about synthio
