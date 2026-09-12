@@ -424,6 +424,28 @@ class BasslineSynth(Synth):
         self._refresh_accent()
         super().note_on(midi_note, velocity, glide=glide)
 
+    def note_off(self, midi_note):
+        """Freeze a released note's bend before Synth.note_off() releases
+        it, same reasoning as Synth's own note_off() freeze, but keyed on
+        slide_time rather than glide_time.
+
+        note_on_step() always passes an explicit per-note glide= override
+        (self._slide_time or 0.0), so Synth.note_on()'s
+        `secs = self._glide_time if glide is None else glide` never
+        consults self._glide_time for this class -- it stays 0.0, so
+        Synth.note_off()'s `if self.mono and self._glide_time:` guard never
+        fires here. Without this, a released tail keeps a LIVE reference to
+        the shared bend graph and the next slide's _aim_glide() drags it
+        along for the length of its release, the exact bug that guard
+        exists to prevent, just reached through the one path it doesn't
+        check. See tests/test_mono.py.
+        """
+        if self.mono and self._slide_time and midi_note in self.voices:
+            for n in self.voices[midi_note]:
+                b = n.bend
+                n.bend = getattr(b, "value", b)
+        super().note_off(midi_note)
+
     def _make_notes(self, midi_note, velocity):
         f = synthio.midi_to_hz(midi_note + self._transpose)
         # No amplitude: the 303 is a fixed-level instrument and velocity
