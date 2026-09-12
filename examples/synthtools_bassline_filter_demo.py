@@ -20,7 +20,7 @@
 
 import time
 
-from synth_setup import mixer
+from synth_setup import knobA, mixer
 from synth_setup import synth as engine
 
 from synthtools import BasslineSynth, Patch
@@ -43,10 +43,12 @@ patch = Patch(
     # THE TWO NUMBERS THAT DECIDE WHETHER YOU HEAR envmod AT ALL.
     #
     # fenv_attack is the filter FALL time, and it must be shorter than the
-    # gate (here 0.9 * a 136ms step = 123ms) or the sweep is cut off
-    # partway: at 0.28s it only got 23% of the way down, so envmod=0.75
-    # moved 0.74 octaves instead of 2.0, and envmod=0.2 moved 0.16; i.e.
-    # nothing. At 0.09s the sweep completes inside the note.
+    # gate (GATE * the current step's duration, and knobA sweeps that live --
+    # see BPM_MIN/BPM_MAX below) or the sweep is cut off partway: at 0.28s it
+    # only got 23% of the way down at this file's original fixed tempo, so
+    # envmod=0.75 moved 0.74 octaves instead of 2.0, and envmod=0.2 moved
+    # 0.16; i.e. nothing. At 0.09s the sweep completes inside the note across
+    # nearly all of knobA's range; see the GATE comment for where it doesn't.
     #
     # The amp decay must be LONGER than that, so the note is still loud
     # while the cutoff falls. Equal times sound like one gesture (a
@@ -57,7 +59,7 @@ patch = Patch(
     fenv_release=0.05,
     # 3 gives the fast drop and long tail that reads as "analog". At 1 the
     # sweep is a straight line and sounds noticeably more synthetic.
-    fenv_curve=3,
+    fenv_curve=2,
     # what an accented step gets, on top of the above -- see
     # synthtools_bassline_accent_demo.py; not swept here.
     accent=0.6,
@@ -106,19 +108,27 @@ PATTERN = (
     (34, False, False),
 )
 
-BPM = 110
-STEP = 60.0 / BPM / 4  # sixteenth notes
+# knobA sweeps bpm continuously across this range; see bpm_to_step() below.
+BPM_MIN, BPM_MAX = 80, 160
 # Long gate on purpose: the filter sweep only happens while the note is
-# held, so a short gate truncates it. 0.9 leaves the sweep (0.09s) room to
-# finish inside the note (0.123s).
+# held, so a short gate truncates it. GATE*held must stay >= fenv_attack
+# (0.09s), which holds up to 150 bpm (held 90ms, exactly fenv_attack) but
+# not past it: at BPM_MAX=160, held is only 84ms, so the sweep gets ~93% of
+# the way down at the fastest knob setting -- mild, not the ~23% seen
+# elsewhere in this file with a badly mismatched fenv_attack, but real.
 GATE = 0.9  # fraction of a step a note is held for
+
+
+def bpm_to_step(bpm):
+    return 60.0 / bpm / 4  # sixteenth notes
+
 
 # Each entry is (label, function), applied for BARS_PER_CHANGE bars each.
 BARS_PER_CHANGE = 2
 CHANGES = (
     ("filt_f 1200, the resting cutoff", lambda: setattr(synth, "filt_f", 1200)),
     ("filt_f 500, darker, and the sweep shrinks with it", lambda: setattr(synth, "filt_f", 500)),
-    ("filt_f 2500, brighter, and the sweep grows", lambda: setattr(synth, "filt_f", 2500)),
+    ("filt_f 3500, brighter, and the sweep grows", lambda: setattr(synth, "filt_f", 3500)),
     ("filt_f 1200 again", lambda: setattr(synth, "filt_f", 1200)),
     ("envmod 0.2, barely any sweep", lambda: setattr(synth, "envmod", 0.2)),
     ("envmod 1.0, sweeps all the way shut", lambda: setattr(synth, "envmod", 1.0)),
@@ -138,32 +148,40 @@ CHANGES = (
         lambda: setattr(synth, "decay", 0.05),
     ),
     (
-        "decay 0.30, longer than the gate, so it never finishes",
-        lambda: setattr(synth, "decay", 0.30),
+        "decay 0.50, longer than the gate, so it never finishes",
+        lambda: setattr(synth, "decay", 0.50),
     ),
     ("decay 0.09", lambda: setattr(synth, "decay", 0.09)),
     ('wave "SQU", the other 303 switch position', lambda: setattr(synth, "wave", "SQU")),
     ('wave "SAW"', lambda: setattr(synth, "wave", "SAW")),
 )
 
-print("bassline filter demo: %d steps at %d bpm" % (len(PATTERN), BPM))
+print("bassline filter demo: %d steps, knobA sweeps %d-%d bpm" % (len(PATTERN), BPM_MIN, BPM_MAX))
 
 bar = 0
 while True:
     for i, step in enumerate(PATTERN):
+        # Named note_step, NOT step: the for-loop above already owns that
+        # name for the current PATTERN entry, and shadowing it here once
+        # cost a `TypeError: unsupported types for __mul__: 'tuple',
+        # 'float'` two lines down, from `step * GATE` silently multiplying
+        # the pattern tuple instead of a duration.
+        bpm = BPM_MIN + (knobA.value / 65535) * (BPM_MAX - BPM_MIN)
+        note_step = bpm_to_step(bpm)
+
         if i == 0:
             if bar % BARS_PER_CHANGE == 0:
                 label, apply = CHANGES[(bar // BARS_PER_CHANGE) % len(CHANGES)]
-                print("  %s" % label)
+                print("bpm:%d %s" % (bpm, label))
                 apply()
             bar += 1
 
         if step is None:  # a rest
-            time.sleep(STEP)
+            time.sleep(note_step)
             continue
 
         note, slide, accent = step
         synth.note_on_step(note, slide=slide, accent=accent)
-        time.sleep(STEP * GATE)
+        time.sleep(note_step * GATE)
         synth.note_off(note)
-        time.sleep(STEP * (1.0 - GATE))
+        time.sleep(note_step * (1.0 - GATE))

@@ -5,8 +5,9 @@ import time
 
 import synthio
 import ulab.numpy as np
-from step_sequencer import StepSequencer
 from synth_setup import keys, knobA, knobB, synth
+
+from synthtools.step_sequencer import StepSequencer
 
 bpm = 120
 gate_length = 0.3  #  percent 0-1

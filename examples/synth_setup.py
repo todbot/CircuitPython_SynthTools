@@ -47,7 +47,7 @@ audio.play(mixer)
 
 # plug the synth into the first 'voice' of the mixer
 mixer.voice[0].play(synth)
-mixer.voice[0].level = 0.25  # 0.25 usually better for headphones, 1.0 for speakers
+mixer.voice[0].level = 0.35  # 0.25 usually better for headphones, 1.0 for speakers
 
 # more on this later, but makes it sound nicer
 synth.envelope = synthio.Envelope(attack_time=0.0, release_time=0.6)
