@@ -2,15 +2,17 @@
 # SPDX-License-Identifier: MIT
 
 # adding this can help with timing, if you need it
-# import microcontroller
-# microcontroller.cpu.frequency = 200_000_000
+import microcontroller
+
+microcontroller.cpu.frequency = 200_000_000
 
 import time
 
 import audiocore
 import audiomixer
 from synth_setup import BUFFER_SIZE, SAMPLE_RATE, audio
-from trig_sequencer import TrigSequencer
+
+from synthtools.trig_sequencer import TrigSequencer
 
 bpm = 120
 trig_count = 4
