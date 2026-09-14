@@ -589,18 +589,22 @@ class BasslineSynth(Synth):
         moves to the new pitch that interval is counted twice. Both happen
         inside one render block, so it is never heard, but a yield in
         between would be.
+
+        The RE-KEY at the end is not bookkeeping for its own sake. All
+        three dicts are keyed by midi note, and note_off() is called later
+        with the NEW one; leave them on the old key and that note_off finds
+        nothing, so the voice is never released and its filter envelope
+        never enters release. A stuck note and a leaked synthio channel,
+        once per slide.
         """
-        old = next(iter(self.voices))
-        notes = self.voices.pop(old)
+        old = next(iter(self.voices))  # mono: there is only ever one
         self._aim_glide(midi_note, self._slide_time)
         f = synthio.midi_to_hz(midi_note + self._transpose)
-        for n in notes:
+        for n in self.voices[old]:
             n.frequency = f
-        self.voices[midi_note] = notes
-        if old in self._fenvs:
-            self._fenvs[midi_note] = self._fenvs.pop(old)
-        if old in self._penvs:
-            self._penvs[midi_note] = self._penvs.pop(old)
+        for keyed in (self.voices, self._fenvs, self._penvs):
+            if old in keyed:  # no envelope node at all when its amount is 0
+                keyed[midi_note] = keyed.pop(old)
 
     def note_on(self, midi_note, velocity=127, glide=None):
         """MIDI-style note-on. Accents at or above ``accent_velocity``.
