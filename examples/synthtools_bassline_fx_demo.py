@@ -33,7 +33,10 @@ patch = Patch(
     filt_f=1200,
     filt_q=1.8,
     envmod=0.75,
-    amp_env=[0.001, 0.25, 0.0, 0.02],
+    # decay far longer than a step, as the stock 303's fixed ~3.5s VCA
+    # decay is: the level stays flat for the gate, so a TIED note is still
+    # audible on its second step. See synthtools_bassline_accent_demo.py.
+    amp_env=[0.003, 3.5, 0.0, 0.05],
     fenv_attack=0.09,
     fenv_release=0.05,
     fenv_curve=3,
@@ -154,6 +157,14 @@ while True:
 
         note, slide, accent = step
         synth.note_on_step(note, slide=slide, accent=accent)
-        time.sleep(STEP * GATE)
-        synth.note_off(note)
-        time.sleep(STEP * (1.0 - GATE))
+        # A slid step TIES to the one before it, and can only do that while
+        # that one is still sounding. So hold the gate open across the whole
+        # step whenever the NEXT one slides; releasing here would leave the
+        # tie with nothing to tie to and it would retrigger instead.
+        nxt = PATTERN[(i + 1) % len(PATTERN)]
+        if nxt is not None and nxt[1]:
+            time.sleep(STEP)
+        else:
+            time.sleep(STEP * GATE)
+            synth.note_off(note)
+            time.sleep(STEP * (1.0 - GATE))

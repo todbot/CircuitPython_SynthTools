@@ -103,24 +103,33 @@ class EffectsChain:
             src = stage
 
 
-def tracking_filter(synth, stages=1, buffer_size=1024, mix=1.0):
+def tracking_filter(synth, stages=1, buffer_size=1024, mix=1.0, hpf_f=None):
     """Build one ``audiofilters.Filter`` holding ``stages`` extra Biquads
     that track ``synth.filter``'s cutoff AND resonance; see the module
     comment for why that's automatic once they share the live blocks.
     ``stages`` extra 12 dB/octave sections plus the synth's own give
     ``12*(stages+1)`` overall.
 
+    ``hpf_f`` adds a fixed high-pass section at that frequency in Hz, in
+    the SAME biquad tuple, so it costs no extra buffer and no extra pass.
+    It is a plain number rather than a shared block on purpose: it must
+    not follow the cutoff. A TB-303's thin bass comes from small coupling
+    capacitors between the filter and the VCA, which sit at one corner
+    whatever the filter is doing. ``stages=0`` is legal with it, for a
+    high-pass alone.
+
     Raises ``ImportError`` if this build has no ``audiofilters``,
-    ``ValueError`` if ``stages < 1`` or ``synth`` has no filter to track
-    (either a poly synth, which has no ``.filter`` at all, or a mono one
-    built with ``filt_type=None``).
+    ``ValueError`` if ``stages < 1`` without an ``hpf_f``, or if tracking
+    stages were asked for and ``synth`` has no filter to track (either a
+    poly synth, which has no ``.filter`` at all, or a mono one built with
+    ``filt_type=None``).
     """
     if audiofilters is None:
         raise ImportError("audiofilters is not in this CircuitPython build")
-    if stages < 1:
+    if stages < 1 and not hpf_f:
         raise ValueError("stages must be >= 1")
     src = getattr(synth, "filter", None)
-    if src is None:
+    if stages >= 1 and src is None:
         raise ValueError("synth has no filter to track (mono-only, and filt_type must be set)")
     synthesizer = synth.synthio
     # Copies sharing src's frequency AND Q blocks, both live, so both track
@@ -130,6 +139,9 @@ def tracking_filter(synth, stages=1, buffer_size=1024, mix=1.0):
     biquads = tuple(
         synthio.Biquad(src.mode, frequency=src.frequency, Q=src.Q) for _ in range(stages)
     )
+    if hpf_f:
+        # last, so it sheds low end from everything ahead of it
+        biquads += (synthio.Biquad(synthio.FilterMode.HIGH_PASS, frequency=hpf_f, Q=0.707),)
     return audiofilters.Filter(
         filter=biquads,
         mix=mix,

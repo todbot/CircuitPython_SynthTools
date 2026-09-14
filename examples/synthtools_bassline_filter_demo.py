@@ -53,8 +53,11 @@ patch = Patch(
     # The amp decay must be LONGER than that, so the note is still loud
     # while the cutoff falls. Equal times sound like one gesture (a
     # pluck), because loudness and brightness drop together and mask each
-    # other. Sustain 0 means every step plucks; there is no held part.
-    amp_env=[0.001, 0.25, 0.0, 0.02],
+    # other. Longer than a whole step, in fact: the stock 303's VCA decay
+    # is fixed near 3.5s whatever the Decay knob says, which keeps the
+    # level flat for the length of the gate and keeps a TIED note audible
+    # through its second step.
+    amp_env=[0.003, 3.5, 0.0, 0.05],
     fenv_attack=0.09,  # the FALL time (the sweep runs downward)
     fenv_release=0.05,
     # 3 gives the fast drop and long tail that reads as "analog". At 1 the
@@ -182,6 +185,14 @@ while True:
 
         note, slide, accent = step
         synth.note_on_step(note, slide=slide, accent=accent)
-        time.sleep(note_step * GATE)
-        synth.note_off(note)
-        time.sleep(note_step * (1.0 - GATE))
+        # A slid step TIES to the one before it, and can only do that while
+        # that one is still sounding. So hold the gate open across the whole
+        # step whenever the NEXT one slides; releasing here would leave the
+        # tie with nothing to tie to and it would retrigger instead.
+        nxt = PATTERN[(i + 1) % len(PATTERN)]
+        if nxt is not None and nxt[1]:
+            time.sleep(note_step)
+        else:
+            time.sleep(note_step * GATE)
+            synth.note_off(note)
+            time.sleep(note_step * (1.0 - GATE))

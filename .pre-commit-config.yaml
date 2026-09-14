@@ -19,4 +19,4 @@ repos:
     rev: v6.2.0
     hooks:
       - id: reuse
-exclude: 'docs/.*|tests/.*'
+exclude: 'docs/.*|tests/.*|temp/.*'

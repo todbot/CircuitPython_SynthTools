@@ -50,6 +50,10 @@ _build
 
 # todstuff
 tmp
+# scratch. Also what keeps `reuse` off it: that hook is pass_filenames:false,
+# so .pre-commit-config.yaml's exclude never reaches it, but REUSE skips
+# whatever git ignores.
+temp/
 
 # not ready for tracking/CI yet
 docs/diagrams/

@@ -174,8 +174,11 @@ ck(abs(bottom - 300.0) < 1e-6,
    "tracking, got %r" % bottom)
 syn.note_off(36)
 
-# accent rides it too
+# accent rides it too. The accent arrives through a one-shot lag ramp, and
+# the stub LFO reads waveform[0] (=0.0) for any phase below 1.0, so run the
+# lag out first or this reads the un-accented cutoff and proves nothing.
 syn.note_on_step(38, accent=True)
+syn._accent_lag.phase = 1.0
 ck(cb.value > 1200.0, "an accented step must lift cutoff, got %r" % cb.value)
 syn.note_off(38)
 
@@ -210,10 +213,29 @@ except ValueError:
     pass
 
 try:
-    tracking_filter(make(), stages=0)
+    tracking_filter(make(), stages=0, hpf_f=None)
     ck(False, "stages < 1 must be refused, an empty chain already needs no filter")
 except ValueError:
     pass
+
+# --- the fixed high-pass rides in the SAME biquad tuple -------------------
+
+hpf = tracking_filter(make(), stages=1, hpf_f=80.0)
+ck(len(hpf.filter) == 2,
+   "hpf_f must add ONE more biquad to the same tuple, not a second Filter: "
+   "a Filter each costs a buffer and a pass per stage")
+ck(hpf.filter[-1].mode == synthio.FilterMode.HIGH_PASS,
+   "the high-pass must be the LAST section, so it sheds low end from "
+   "everything ahead of it")
+ck(hpf.filter[-1].frequency == 80.0,
+   "the high-pass must be a plain number, NOT the shared cutoff node: it "
+   "stands in for fixed coupling caps and must not follow the sweep, "
+   "got %r" % (hpf.filter[-1].frequency,))
+
+hpf_only = tracking_filter(make(filt_type=None), stages=0, hpf_f=80.0)
+ck(len(hpf_only.filter) == 1,
+   "stages=0 with an hpf_f must build the high-pass alone, and must not "
+   "need a voice filter to track")
 
 # --- wiring a real tracking_filter into a chain ---------------------------
 
@@ -257,6 +279,39 @@ ck(no_filter.output is no_filter.synthio,
    "fx_filter_stages > 0 with filt_type=None must build nothing and raise "
    "nothing, there is no cutoff to track, same as _voice_cutoff()'s own "
    "silent no-op")
+
+hpf_syn = make(fx_hpf_f=80.0)
+ck(len(hpf_syn.fx.effects) == 1 and len(hpf_syn.fx.effects[0].filter) == 1,
+   "fx_hpf_f alone must build one Filter holding just the high-pass, with "
+   "no tracking stages")
+hpf_nofilt = make(filt_type=None, fx_hpf_f=80.0)
+ck(len(hpf_nofilt.fx.effects) == 1,
+   "the high-pass tracks nothing, so it must survive filt_type=None even "
+   "though the tracking stages do not")
+
+hpf_struct = make(fx_hpf_f=80.0)
+hpf_chain = hpf_struct.fx
+hpf_struct.fx_hpf_f = 120.0
+ck(hpf_struct._fx is None,
+   "fx_hpf_f is STRUCTURAL: the biquad holds a plain number, so a change "
+   "has to rebuild, there is no live block to write")
+ck("fx_hpf_f" not in BasslineSynth._PARAMS,
+   "fx_hpf_f must stay out of _PARAMS like the other structural fields: a "
+   "MIDI CC would drop the chain the mixer is playing")
+hpf_struct.load_patch(Patch(wave="SAW", filt_f=1200, envmod=0.75, fx_hpf_f=120.0))
+ck(hpf_struct._fx is not hpf_chain,
+   "...and the rebuilt chain must not be the one built at 80 Hz")
+same_hpf = make(fx_hpf_f=80.0)
+same_hpf_chain = same_hpf.fx
+same_hpf.load_patch(Patch(wave="SAW", filt_f=1200, envmod=0.75, fx_hpf_f=80.0))
+ck(same_hpf._fx is same_hpf_chain,
+   "loading the same fx_hpf_f must NOT invalidate, same guard as the others")
+none_hpf = make(fx_hpf_f=0.0)
+none_hpf_out = none_hpf.output
+none_hpf.load_patch(Patch(wave="SAW", filt_f=1200, envmod=0.75, fx_hpf_f=None))
+ck(none_hpf._fx is not None and none_hpf.output is none_hpf_out,
+   "None and 0 are the same 'off', so a patch spelling it the other way "
+   "must not read as a shape change and drop the chain")
 
 dist_syn = make(fx_distortion_on=True, fx_drive=0.5, fx_drive_mix=0.4)
 ck(len(dist_syn.fx.effects) == 1 and isinstance(dist_syn.fx.effects[0], audiofilters.Distortion),
@@ -367,18 +422,20 @@ _bl_mod.audiodelays = _saved_ad
 ck(len(atomic_syn.fx.effects) == 2,
    "once audiodelays is back, a retry must build the full chain cleanly")
 
-# --- patch save/load round-trips all nine fields, and set_param() ---------
+# --- patch save/load round-trips all ten fields, and set_param() ----------
 
-rt = make(fx_filter_stages=3, fx_filter_mix=0.5, fx_distortion_on=True,
+rt = make(fx_filter_stages=3, fx_filter_mix=0.5, fx_hpf_f=80.0,
+          fx_distortion_on=True,
           fx_drive=0.3, fx_drive_mix=0.2, fx_echo_on=True, fx_delay_ms=222,
           fx_delay_mix=0.1, fx_delay_decay=0.4)
 saved = rt.save_patch()
 ck(saved.fx_filter_stages == 3 and saved.fx_filter_mix == 0.5
+   and saved.fx_hpf_f == 80.0
    and saved.fx_distortion_on is True and saved.fx_drive == 0.3
    and saved.fx_drive_mix == 0.2 and saved.fx_echo_on is True
    and saved.fx_delay_ms == 222 and saved.fx_delay_mix == 0.1
    and saved.fx_delay_decay == 0.4,
-   "save_patch() must round-trip all nine fx_* fields")
+   "save_patch() must round-trip all ten fx_* fields")
 
 pset = make()
 pset.set_param("fx_drive_mix", 0.55)

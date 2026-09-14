@@ -14,9 +14,11 @@
 #   slide   glide the pitch into this step from the one before
 #   accent  a louder, brighter, more resonant step
 #
-# Note a slide glides but still retriggers the envelopes; a real 303 ties
-# the two steps into one held note. Being monophonic, the synth steals its
-# own sounding voice, so the loop below never has to track what is playing.
+# A slide TIES the two steps into one held note, as the original does: the
+# pitch glides and the envelopes keep running. That needs the gate held, so
+# the loop below skips its note_off() whenever the NEXT step slides. Being
+# monophonic, the synth steals its own sounding voice otherwise, so the loop
+# still never has to track what is playing.
 
 import time
 
@@ -34,7 +36,12 @@ patch = Patch(
     filt_f=1200,
     filt_q=1.8,
     envmod=0.75,
-    amp_env=[0.001, 0.25, 0.0, 0.02],
+    # Decay far longer than a step, so the level is essentially flat for as
+    # long as the gate is open. That is the stock 303 (its VCA envelope
+    # decay is fixed near 3.5s, untouched by the Decay knob) and it is what
+    # keeps a TIED note audible through its second step; at 0.25s a slide
+    # landed on a note that had already faded out.
+    amp_env=[0.003, 3.5, 0.0, 0.05],
     fenv_attack=0.09,
     fenv_release=0.05,
     fenv_curve=3,
@@ -132,6 +139,14 @@ while True:
 
         note, slide, accent = step
         synth.note_on_step(note, slide=slide, accent=accent)
-        time.sleep(cur_step * GATE)
-        synth.note_off(note)
-        time.sleep(cur_step * (1.0 - GATE))
+        # A slid step TIES to the one before it, and can only do that while
+        # that one is still sounding. So hold the gate open across the whole
+        # step whenever the NEXT one slides; releasing here would leave the
+        # tie with nothing to tie to and it would retrigger instead.
+        nxt = PATTERN[(i + 1) % len(PATTERN)]
+        if nxt is not None and nxt[1]:
+            time.sleep(cur_step)
+        else:
+            time.sleep(cur_step * GATE)
+            synth.note_off(note)
+            time.sleep(cur_step * (1.0 - GATE))
