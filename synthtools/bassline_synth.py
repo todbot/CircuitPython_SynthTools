@@ -15,17 +15,28 @@
 #    at peak instead of falling, which looks like the wrong shape, but AHR
 #    with a NEGATIVE amount is exactly this:
 #
-#        filt_f      the peak the sweep starts from
-#        fenv_amount -envmod * filt_f, so the sweep runs DOWNWARD
+#        fenv_amount rest - peak, so the sweep runs DOWNWARD
 #        fenv_attack the fall time (a decay, despite the name)
 #
 #    The shape buffer is 1-(1-t)^curve, fast-then-easing, which run downward
 #    is the quick drop and long tail the 303 is known for. Everything there
-#    is still a shared block, so it stays O(1) live. FILT_F_MIN earns its
-#    keep: envmod = 1.0 aims the sweep at 0 Hz and the clamp catches it.
+#    is still a shared block, so it stays O(1) live.
 #
-#    envmod being a FRACTION of filt_f rather than a number of Hz is the
-#    303's own arrangement, and why the envelope tracks the cutoff knob.
+#    The two endpoints are EXPONENTIAL either side of filt_f, because the
+#    303 sums control voltages and exponentiates rather than adding Hz:
+#
+#        peak = filt_f * exp( envmod*RANGE * (1-BIAS))
+#        rest = filt_f * exp(-envmod*RANGE * BIAS)
+#
+#    which is exponential in frequency, i.e. LINEAR IN PITCH: a sweep, not
+#    a fade. At the default ENV_BIAS of 1.0 the peak reduces to filt_f, so
+#    the cutoff knob is still the brightest the voice gets and env mod only
+#    darkens; lower it to split the sweep either side of filt_f, at the
+#    cost of making every existing patch brighter. See ENV_BIAS and
+#    _env_endpoints(), which owns the arithmetic and the clamp.
+#
+#    envmod being a fraction rather than a number of Hz is the 303's own
+#    arrangement, and why the envelope tracks the cutoff knob.
 #
 # 2. ACCENT, which must not contaminate the patch. An accented step raises
 #    cutoff, resonance, envelope depth and level, all shared blocks here, so
@@ -42,6 +53,8 @@
 #    still one write and still reaches a sounding note, while filt_f and
 #    filt_q read back clean. Only fenv_amount has no spare slot; it is
 #    derived from envmod anyway, so _decompile() re-derives it on save.
+
+from math import exp
 
 import synthio
 
@@ -69,10 +82,10 @@ class BasslineSynth(Synth):
     303 knob    here
     ==========  ====================================================
     tuning      ``transpose`` (semitones)
-    cutoff      ``filt_f``, the peak the filter sweep starts from
-    resonance   ``filt_q``
-    env mod     ``envmod``, sweep depth as a FRACTION of filt_f
-    decay       ``decay``, seconds, both the filter fall and the amp
+    cutoff      ``filt_f``, the top of the filter sweep
+    resonance   ``filt_q``; also sets accent sweep depth and its lag
+    env mod     ``envmod``, sweep depth, 0..1, exponential below filt_f
+    decay       ``decay``, seconds; the FILTER fall only, not the amp
     accent      ``accent``, how much an accented step is boosted
     ==========  ====================================================
 
@@ -91,6 +104,8 @@ class BasslineSynth(Synth):
     ``envmod`` is the source of truth for the filter envelope's depth.
     ``fenv_amount`` is derived from it and from ``filt_f``, so writing
     ``fenv_amount`` directly is overwritten by the next change to either.
+    Likewise ``decay`` owns ``fenv_attack``, since an accented step
+    overwrites the live value with ``ACCENT_FALL``.
     """
 
     # fmt: off
@@ -126,6 +141,27 @@ class BasslineSynth(Synth):
     #: none. The lag is what turns an accent from a step into a swell.
     ACCENT_LAG = 0.04
 
+    #: How much of the sweep sits BELOW ``filt_f``. 1.0, the default, puts
+    #: all of it there, so the cutoff knob stays the brightest the voice
+    #: gets and env mod only ever darkens.
+    #:
+    #: The circuit-level figure is 0.3137 -- the envelope is scaled after
+    #: subtracting ~31.4% of its own height -- which splits the sweep and
+    #: lets the peak rise ABOVE filt_f as env mod comes up. That is what
+    #: the hardware does, but it makes every patch voiced against the old
+    #: linear mapping abruptly brighter, and it is at odds with the usual
+    #: justification for the bias (that it keeps the sweep in an audible
+    #: range rather than just making everything brighter). Set it to
+    #: 0.3137 for the faithful version. Read when the patch compiles, so
+    #: set it BEFORE constructing, like FILT_F_MAX.
+    ENV_BIAS = 1.0
+
+    #: Depth of the sweep at ``envmod`` 1.0, as a natural-log span:
+    #: 1.848 nats is 2.67 octaves. Chosen so envmod 0.75 lands on the same
+    #: endpoints the earlier linear ``-envmod * filt_f`` mapping gave, the
+    #: one setting where the two can be made to agree exactly.
+    ENVMOD_RANGE = 1.848
+
     #: ``filt_q``'s useful range, per ``Synth.filt_q``. The accent sweep's
     #: depth is normalized against it: on the original the Resonance pot is
     #: dual-gang and its second half is what drives the sweep circuit.
@@ -147,6 +183,8 @@ class BasslineSynth(Synth):
     _decay = 0.05  # mirror of fenv_attack; accent overwrites the live one
     _fall = None  # what _fenv.attack actually holds, so writes can be guarded
     _acc_hz = 0.0  # accent boost per unit of sweep; see _refresh_accent_depth
+    _e_peak = 1.0  # sweep endpoints as multipliers on filt_f, so the
+    _e_rest = 1.0  # exponentials stay off the note-on path; _refresh_envmod
     _accent_on = False
     _accent_sweep = 0.0  # performance state: never saved, never in _PARAMS
     _env_accent = None
@@ -226,7 +264,8 @@ class BasslineSynth(Synth):
         get_wave(self._wave_name)  # warm the cache; note-on only reads it
         self._accent_on = False
         self._accent_sweep = 0.0
-        self._refresh_accent_depth()  # before _refresh_accent(), which reads it
+        self._refresh_envmod()  # both before _refresh_accent(), which reads them
+        self._refresh_accent_depth()
         self._refresh_accent()  # also derives fenv_amount from envmod
         self._rebuild_env()
 
@@ -279,7 +318,8 @@ class BasslineSynth(Synth):
         # which on an accented step is the boosted depth and the shortened
         # fall. Both have a real knob behind them, so re-derive rather than
         # store what accent left there.
-        p.fenv_amount = -self._envmod * self._filt_f_blk.a
+        peak, rest = self._env_endpoints()  # un-accented: no sweep widening
+        p.fenv_amount = rest - peak
         p.fenv_attack = self._decay
         p.fx_filter_stages = self._fx_filter_stages
         p.fx_filter_mix = self._fx_filter_mix
@@ -498,9 +538,6 @@ class BasslineSynth(Synth):
         # say it does, Whittle's circuit reading says resonance drives the
         # sweep instead. Kept small as a musical extra, defaulting low.
         self._filt_q_blk.b = self._accent_q * sweep
-        # the 303 scales env mod by the ALREADY accented cutoff, so an
-        # accented step sweeps a wider range as well as a higher one
-        envmod = min(1.0, self._envmod + 0.25 * sweep)
         # The shortened fall is per-STEP, not swept: an accented step's
         # envelope decay is pinned short whatever the Decay knob says. This
         # is why `decay` reads back from self._decay rather than from the
@@ -513,8 +550,76 @@ class BasslineSynth(Synth):
         if fall != self._fall:
             self._fall = fall
             self._fenv.attack = fall
-        self._accent_lag.scale = boost  # the ramp carries it in
-        self._fenv.amount = -envmod * (self._filt_f_blk.a + boost)
+        # The sweep runs peak -> rest, both derived exponentially from
+        # filt_f. offset is the DC half of the LFO the accent already
+        # rides, so the peak costs no block of its own.
+        peak, rest = self._env_endpoints()
+        f = self._filt_f_blk.a
+        # Accent is a VOLTAGE on the cutoff bus, so it moves the whole
+        # sweep in PITCH: both endpoints scale by the same factor and the
+        # sweep keeps its octave depth. Lifting only the top instead leaves
+        # an accented note bright and nearly static -- measured 0.49
+        # octaves where an un-accented one gets 2.0, which sounds like the
+        # accent broke the filter rather than accenting it.
+        mult = 1.0 + boost / f
+        self._accent_lag.offset = peak - f
+        self._accent_lag.scale = peak * (mult - 1.0)  # the ramp carries it in
+        # An accented step also sweeps a WIDER range. Applied as a scale on
+        # the span rather than as a bump to envmod, which would need its
+        # own pair of exponentials every step.
+        span = (rest - peak) * mult * (1.0 + 0.25 * sweep)  # negative: runs DOWN
+        self._fenv.amount = span
+        # ...and release HOLDS there rather than returning to zero, which
+        # on this arrangement would jump the cutoff back up to the peak at
+        # every note-off.
+        self._fenv.release_amount = span
+
+    def _refresh_envmod(self):
+        """Recompute the sweep's endpoints as MULTIPLIERS on filt_f.
+
+        The exponentials live here, on the knob path, and never in the
+        note-on path: rp2040 has no FPU, so ``exp()`` is a soft-float call
+        costing ~250 us, and two per step was more than the whole rest of
+        the accent work put together. filt_f only scales the result, so it
+        does not need to be part of this.
+        """
+        k = self._envmod * self.ENVMOD_RANGE
+        self._e_peak = exp(k * (1.0 - self.ENV_BIAS))
+        self._e_rest = exp(-k * self.ENV_BIAS)
+
+    def _env_endpoints(self):
+        """Where the filter sweep starts and ends, in Hz.
+
+        The 303 does not add Hz to a cutoff; it sums control voltages and
+        exponentiates, ``Fc = Vcutoff * exp(Venvmod + ...)``. Two things
+        follow, and the second is the one that matters:
+
+        - the sweep is exponential in frequency, i.e. LINEAR IN PITCH,
+          which is what makes it read as a filter sweep rather than a fade;
+        - the envelope is scaled after subtracting ``ENV_BIAS`` of its own
+          height, so turning env mod up pulls the RESTING cutoff down as
+          well as pushing the peak up. Without that coupling, more env mod
+          just means brighter everything, and the sweep wanders out of the
+          range where it is audible at all.
+
+        So ``filt_f`` is no longer the top of the sweep; it is the point
+        the sweep is centred on. ``envmod`` 0 collapses both endpoints onto
+        it, which keeps costing nothing: AHREnvelope.make() builds no node
+        when the amount is 0.
+
+        The peak is clamped HERE, in Python, and not left to the block
+        clamp on the shared base. That clamp sits BEFORE the envelope is
+        added, so a peak above the ceiling would be clipped while the much
+        larger negative span was not, and the resting cutoff would be
+        dragged to FILT_F_MIN. Measured: filt_f 4000, envmod 1.0 gives a
+        26.8k peak clipped to 20k, a -25.1k span, and a resting cutoff of
+        -5.1k, i.e. pinned at 20 Hz instead of 1676.
+        """
+        f = self._filt_f_blk.a
+        peak = f * self._e_peak
+        if peak > self.FILT_F_MAX:
+            peak = self.FILT_F_MAX
+        return peak, f * self._e_rest
 
     def _strike_accent(self, accented):
         """One STEP's worth of accent: charge the sweep, push it out, and
@@ -742,6 +847,7 @@ class BasslineSynth(Synth):
     @envmod.setter
     def envmod(self, v):
         self._envmod = v
+        self._refresh_envmod()
         self._refresh_accent()
 
     @property

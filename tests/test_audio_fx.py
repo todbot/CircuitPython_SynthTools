@@ -168,10 +168,14 @@ env.c.phase = 0.0
 top = cb.value
 env.c.phase = 1.0
 bottom = cb.value
-ck(abs(top - 1200.0) < 1e-6, "cutoff must start the sweep at filt_f, got %r" % top)
-ck(abs(bottom - 300.0) < 1e-6,
+# Relative, not absolute Hz: where env mod puts the two endpoints is
+# bassline_synth's business (tests/test_mono.py pins the exponential
+# mapping); what matters HERE is that the tracked node carries the sweep.
+ck(top >= 1200.0 > bottom,
+   "the sweep must run down from filt_f, got %r .. %r" % (bottom, top))
+ck(bottom < top,
    "cutoff must FOLLOW the envelope down, that is the whole point of "
-   "tracking, got %r" % bottom)
+   "tracking, got %r -> %r" % (top, bottom))
 syn.note_off(36)
 
 # accent rides it too. The accent arrives through a one-shot lag ramp, and

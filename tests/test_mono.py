@@ -30,6 +30,8 @@ _D = __file__.rsplit("/", 1)[0] if "/" in __file__ else "."
 sys.path.insert(0, _D + "/stubs")
 sys.path.insert(0, _D + "/..")
 
+from math import exp  # noqa: E402
+
 import synthio  # noqa: E402
 from synthtools import BasslineSynth, Patch, SubtractiveSynth  # noqa: E402
 
@@ -210,21 +212,22 @@ ck(
 
 # --- the decay-only filter envelope --------------------------------------
 # fenv_amount is NEGATIVE, so the ordinary rising AHR shape sweeps the
-# cutoff DOWN from filt_f while the key is still held. This is the one
-# gesture AHR is documented as unable to make in its positive direction.
+# cutoff DOWN while the key is still held. This is the one gesture AHR is
+# documented as unable to make in its positive direction.
+#
+# The endpoints are EXPONENTIAL either side of filt_f, not linear below it:
+# the 303 sums control voltages and exponentiates them, and it subtracts
+# ENV_BIAS of the envelope's height first, so env mod pulls the resting
+# cutoff DOWN as it pushes the peak UP. filt_f is therefore the point the
+# sweep is centred on, not the top of it.
+#
+# Asserted as ratios against filt_f rather than as Hz, so ENVMOD_RANGE
+# stays tunable by ear without rewriting the test.
+
+B = BasslineSynth.ENV_BIAS
+R = BasslineSynth.ENVMOD_RANGE
 
 syn = make(filt_f=4000, envmod=0.5, fenv_attack=0.2, fenv_curve=2)
-ck(
-    syn.fenv_amount == -2000.0,
-    "envmod is a FRACTION of filt_f: 0.5 of 4000 must be -2000 Hz, got %r" % syn.fenv_amount,
-)
-syn.filt_f = 2000
-ck(syn.fenv_amount == -1000.0, "moving the cutoff must move the sweep with it")
-syn.envmod = 1.0
-ck(syn.fenv_amount == -2000.0, "envmod must re-derive from the current filt_f")
-
-syn.filt_f = 4000
-syn.envmod = 0.5
 syn.all_notes_off()
 syn.note_on_step(36)
 cutoff = syn.voices[36][0].filter.frequency
@@ -233,28 +236,115 @@ env.c.phase = 0.0
 top = cutoff.value
 env.c.phase = 1.0
 bottom = cutoff.value
-ck(abs(top - 4000.0) < 1e-6, "the sweep must START at filt_f, got %r" % top)
-ck(abs(bottom - 2000.0) < 1e-6, "the sweep must LAND at filt_f+amount, got %r" % bottom)
+k = 0.5 * R
+ck(
+    abs(top / 4000.0 - exp(k * (1.0 - B))) < 1e-6,
+    "the sweep must START at filt_f * exp(k*(1-BIAS)), got a ratio of %r"
+    % (top / 4000.0,),
+)
+ck(
+    abs(bottom / 4000.0 - exp(-k * B)) < 1e-6,
+    "the sweep must LAND at filt_f * exp(-k*BIAS), got a ratio of %r" % (bottom / 4000.0,),
+)
+ck(
+    abs(top - 4000.0) < 1e-6 and bottom < 4000.0,
+    "at the default ENV_BIAS of 1.0 the whole sweep sits BELOW filt_f, so "
+    "the cutoff knob stays the brightest the voice gets, got %r .. %r"
+    % (bottom, top),
+)
+# ...and lowering ENV_BIAS splits it either side, which is the faithful
+# circuit behaviour and the reason the constant exists at all
+split = make(filt_f=4000, envmod=0.5, fenv_attack=0.2)
+split.ENV_BIAS = 0.3137
+split.envmod = 0.5  # force the endpoints to recompute
+split.note_on_step(36)
+scut, senv = split.voices[36][0].filter.frequency, split._fenvs[36]
+senv.c.phase = 0.0
+stop = scut.value
+senv.c.phase = 1.0
+sbot = scut.value
+ck(
+    stop > 4000.0 > sbot,
+    "ENV_BIAS below 1.0 must STRADDLE filt_f, got %r .. %r" % (sbot, stop),
+)
 ck(bottom < top, "a 303 filter envelope must fall, not rise")
+ck(
+    abs(syn.fenv_amount - (bottom - top)) < 1e-6,
+    "fenv_amount must be the span between the two endpoints",
+)
+ck(
+    syn._fenv.release_amount == syn.fenv_amount,
+    "release must HOLD at the resting cutoff: aimed at 0 instead, the "
+    "cutoff would jump back up to the peak at every note-off",
+)
 
-# envmod = 1.0 aims the sweep at 0 Hz, and the clamp is what catches it
-syn = make(filt_f=1000, envmod=1.0, fenv_attack=0.1)
+# both endpoints scale with filt_f, so the sweep still tracks the knob
+syn.filt_f = 2000
+ck(
+    abs(syn.fenv_amount - (bottom - top) / 2.0) < 1e-6,
+    "moving the cutoff must move the whole sweep with it, got %r" % syn.fenv_amount,
+)
+syn.envmod = 1.0
+ck(syn.fenv_amount < (bottom - top) / 2.0, "more env mod must mean a wider sweep")
+
+# envmod = 1.0 is four octaves of sweep, but exponentially either side of
+# filt_f, so the resting cutoff is filt_f*exp(-R*BIAS) ~ 0.42*filt_f and
+# can never reach 0 the way the old linear -envmod*filt_f could. FILT_F_MIN
+# therefore only bites on a genuinely low cutoff.
+syn = make(filt_f=40, envmod=1.0, fenv_attack=0.1)
 syn.note_on_step(36)
 syn._fenvs[36].c.phase = 1.0
 ck(
     syn.voices[36][0].filter.frequency.value == syn.FILT_F_MIN,
-    "envmod=1.0 drives the cutoff to zero; FILT_F_MIN must clamp it",
+    "a sweep aimed below 20 Hz must still be caught by FILT_F_MIN",
 )
 
-# envmod = 0 must cost nothing at all, and accent must still revive it
-syn = make(filt_f=3000, envmod=0.0)
+# the peak is clamped in PYTHON, before the span is derived. The block
+# clamp on the shared base sits before the envelope is added, so leaving it
+# to that would clip the peak and not the span, dragging the resting cutoff
+# to the floor instead of leaving it where it belongs.
+hi = make(filt_f=4000, envmod=1.0, fenv_attack=0.1)
+hi.ENV_BIAS = 0.3137  # only a split bias can push the peak past the ceiling
+hi.envmod = 1.0
+hi.note_on_step(36)
+hi._fenvs[36].c.phase = 1.0
+rest_hz = hi.voices[36][0].filter.frequency.value
+ck(
+    abs(rest_hz - 4000.0 * exp(-R * 0.3137)) < 1.0,
+    "a peak above FILT_F_MAX must not drag the resting cutoff down with "
+    "it; expected ~%r, got %r" % (4000.0 * exp(-R * 0.3137), rest_hz),
+)
+
+# envmod = 0 must cost nothing at all, accented or not. Accent SCALES the
+# sweep now rather than adding to it, so it cannot conjure one out of a
+# patch that asked for none -- but it still lifts the cutoff and the level,
+# which is where an accent with no env mod should show up.
+syn = make(filt_f=3000, envmod=0.0, accent=0.6, accent_cutoff=4000.0)
 syn.note_on_step(36)
 ck(36 not in syn._fenvs, "envmod=0 must build no per-voice envelope node")
 syn.note_on_step(38, accent=True)
+settled(syn)
 ck(
-    38 in syn._fenvs,
-    "an accented step raises the depth off zero, so the node must exist; "
-    "the depth has to be written BEFORE the press or make() skips it",
+    38 not in syn._fenvs,
+    "...and an accented step must not build one either: accent widens the "
+    "sweep, it does not create one, so envmod=0 stays genuinely free",
+)
+ck(
+    syn.voices[38][0].filter.frequency.value > 3000.0,
+    "an accent with no env mod must still lift the cutoff",
+)
+ck(syn.voices[38][0].envelope.attack_level > 0.8, "...and the level")
+
+# the depth still has to be written BEFORE the press, or make() builds the
+# voice against the previous step's span
+ord_syn = make(filt_f=2000, filt_q=BasslineSynth.Q_MAX, envmod=0.5, accent=0.8)
+ord_syn.note_on_step(36, accent=False)
+plain_span = ord_syn.fenv_amount
+ord_syn.note_on_step(38, accent=True)
+ck(
+    ord_syn.fenv_amount < plain_span,
+    "an accented step must WIDEN the sweep, and have done so before the "
+    "press: got %r against %r" % (ord_syn.fenv_amount, plain_span),
 )
 
 # filt_type=None in mono: the voice gets no filter at all, and the cutoff
@@ -285,7 +375,12 @@ patch = syn.patch
 
 syn.note_on_step(36, accent=False)
 plain = syn.voices[36][0]
-ck(plain.filter.frequency.value == 2000.0, "an un-accented step sits at filt_f")
+plain_hz = plain.filter.frequency.value
+ck(
+    abs(plain_hz - 2000.0 * exp(0.6 * R * (1.0 - B))) < 1e-6,
+    "an un-accented step sits at the envelope PEAK, which env mod puts "
+    "above filt_f, got %r" % plain_hz,
+)
 ck(plain.filter.Q.value == BasslineSynth.Q_MAX, "an un-accented step sits at filt_q")
 ck(plain.envelope.attack_level == 0.8, "an un-accented step plays at amp_level")
 ck(syn.decay == patch.fenv_attack, "an un-accented step falls in `decay` seconds")
@@ -297,10 +392,18 @@ acc = syn.voices[38][0]
 # reading them again after a later step reads that later step's values
 acc_hz = acc.filter.frequency.value
 acc_q = acc.filter.Q.value
+# one accent from rest charges the sweep to exactly `accent`, and filt_q
+# is at Q_MAX so the resonance factor on the depth is exactly 1.0
 ck(
-    abs(acc.filter.frequency.value - (2000.0 + 4000.0 * 0.5)) < 1e-6,
-    "accent must ADD accent_cutoff * the sweep, and one accent from rest "
-    "charges the sweep to exactly `accent`, got %r" % acc.filter.frequency.value,
+    acc_hz > plain_hz + 4000.0 * 0.5 - 1e-6,
+    "an accented step must add at least accent_cutoff * the sweep on top "
+    "of the peak, got %r over %r" % (acc_hz, plain_hz),
+)
+ck(
+    abs(acc_hz - (plain_hz + 4000.0 * 0.5)) < 1e-6,
+    "...and EXACTLY that: accent widens the sweep downward rather than "
+    "raising the peak, so the peak the boost sits on is unmoved. got %r, "
+    "want %r" % (acc_hz, plain_hz + 4000.0 * 0.5),
 )
 ck(
     abs(acc.filter.Q.value - (BasslineSynth.Q_MAX + 0.6 * 0.5)) < 1e-9,
@@ -321,6 +424,36 @@ ck(
     syn.decay == patch.fenv_attack,
     "...while `decay` still reads back the KNOB, not the accented value: "
     "reading the block here is the silent-save trap, got %r" % syn.decay,
+)
+
+# --- an accent must move the whole sweep, not just its top ----------------
+# Accent is a VOLTAGE on the cutoff bus, so both endpoints scale together
+# and the sweep keeps its octave depth. Lifting only the top left an
+# accented note with 0.49 octaves of movement against an un-accented 2.0:
+# that reads as the accent breaking the filter rather than accenting it.
+# Its own synth, so stepping it does not disturb the sweep accumulated
+# above.
+
+def _span(s, note, accent):
+    s.note_on_step(note, accent=accent)
+    settled(s)
+    cut, env = s.voices[note][0].filter.frequency, s._fenvs[note]
+    env.c.phase = 0.0
+    hi = cut.value
+    env.c.phase = 1.0
+    lo = cut.value
+    s.note_off(note)
+    return hi / lo
+
+
+oct_syn = make(filt_f=1200, filt_q=BasslineSynth.Q_MAX, envmod=0.75,
+               accent=0.6, accent_cutoff=4000.0, accent_sweep_decay=0.0)
+plain_span = _span(oct_syn, 36, False)
+acc_span = _span(oct_syn, 38, True)
+ck(
+    acc_span > plain_span,
+    "an accented step must sweep at least as many OCTAVES as an un-accented "
+    "one, got %.2fx against %.2fx" % (acc_span, plain_span),
 )
 
 # --- the accent sweep is an accumulator, not a latch ----------------------
@@ -429,10 +562,11 @@ ck(
     "save_patch() during an accented note must store the KNOB values, not the "
     "accented ones, got filt_f=%r filt_q=%r" % (patch.filt_f, patch.filt_q),
 )
+un_peak, un_rest = 2000.0 * exp(0.6 * R * (1.0 - B)), 2000.0 * exp(-0.6 * R * B)
 ck(
-    patch.fenv_amount == -1200.0,
-    "fenv_amount is derived from envmod, so it must be saved un-accented "
-    "(-0.6*2000), got %r" % patch.fenv_amount,
+    abs(patch.fenv_amount - (un_rest - un_peak)) < 1e-6,
+    "fenv_amount is derived from envmod, so it must be saved UN-accented: "
+    "want %r, got %r" % (un_rest - un_peak, patch.fenv_amount),
 )
 ck(
     patch.fenv_attack == knob_fall,
@@ -547,7 +681,10 @@ ck(
 # tracking baked into the node every note after.
 bt = BasslineSynth(
     synthio.Synthesizer(),
-    Patch(filt_type="LPF", filt_f=1000, filt_q=1.0, fenv_amount=0, filt_vel=0, filt_track=1.0),
+    # envmod=0 as well as fenv_amount=0: env mod now biases the base
+    # upward, and this section is about tracking, not about the sweep
+    Patch(filt_type="LPF", filt_f=1000, filt_q=1.0, envmod=0, fenv_amount=0,
+          filt_vel=0, filt_track=1.0),
 )
 bt.note_on(72, velocity=80)  # below accent_velocity: accent writes
 cut = bt._cutoff  # _filt_sum.c and would move the base
