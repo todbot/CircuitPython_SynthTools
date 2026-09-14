@@ -105,16 +105,17 @@ Usage Example
 What's Included
 ===============
 
+* ``Patch`` -- inert, JSON-able patch data; save/load with
+  ``save_patches()`` / ``load_patches()``
 * ``Synth`` -- synth engine base: shared voice, patch, and modulation handling,
-  with ``mono`` mode for a single-voice synth with ``glide_time``  portamento
+  complex filter & pitch envelopes, and a ``mono`` mode for a single-voice
+  synth with ``glide_time``  portamento
 * ``SubtractiveSynth`` -- subtractive two-oscillator synth w/ detune
+* ``WavetableSynth`` -- wavetable-playback with adjustable LFO for wave_pos
 * ``FMSynth`` -- two-operator phase-modulation voice: a carrier waveform
   pre-rendered from ``sin(theta + fm_index*sin(fm_ratio*theta))``.
   ``fm_ratio`` must be an integer; ``fm_index`` is PM depth in radians,
-  0 = plain single-oscillator. (Not a live audio-rate bend modulator --
-  synthio's Math/LFO blocks only update every 256 samples, too slow for
-  that; see the module docstring for why.)
-* ``WavetableSynth`` -- wavetable-playback with adjustable wave_pos
+  0 = plain single-oscillator. (Not a full FM synth, see module for details)
 * ``BasslineSynth`` -- TB-303-style acid bassline: monophonic, one
   oscillator, a decay-only filter sweep, per-step slide and accent. Can
   own its own filter/distortion/echo effects chain via ``fx_*`` patch
@@ -124,26 +125,24 @@ What's Included
   ``tracking_filter()`` builds extra filter stages that follow the synth's
   own cutoff and resonance for a steeper slope (needs ``audiofilters`` in
   the build)
-* ``Patch`` -- inert, JSON-able patch data; save/load with
-  ``save_patches()`` / ``load_patches()``
+* ``Waves`` -- waveform factory (saw, square, sine, triangle, noise, and
+  "analog" variants)
 * ``Wavetable`` -- loads a wavetable WAV file and lerps between frames
 * ``AHREnvelope`` -- shared-block attack/release envelope, used for both
   the filter and pitch envelopes
-* ``Waves`` -- waveform factory (saw, square, sine, triangle, noise, and
-  "analog" variants)
 * ``Arpeggiator`` / ``StepSequencer`` / ``TrigSequencer`` -- poll-based
   sequencers with on/off callbacks
-* ``Param`` / ``ParamSet`` -- knob-pickup and scaling for UIs with fewer
-  knobs than parameters
-* ``ParamScaler`` -- proportional ("scale") knob takeover for a single
-  control, when you are not using ``ParamSet``
-* ``GaugeCluster`` -- a bar-graph display of a parameter page
 * ``Glider`` -- a standalone pitch-slide block for hand-built
   ``synthio.Note`` graphs (the engines above have their own portamento,
   via ``mono`` + ``glide_time``)
-* ``RollingAverage`` -- moving-average smoothing for noisy knob reads
 * ``Scale`` / ``chord`` -- scales and diatonic/chromatic chords for
   mapping pads and MIDI onto pitch
+* ``Param`` / ``ParamSet`` -- (UI) knob-pickup and scaling for UIs with fewer
+  knobs than parameters
+* ``ParamScaler`` -- (UI) proportional ("scale") knob takeover for a single
+  control, when you are not using ``ParamSet``
+* ``GaugeCluster`` -- (UI) a bar-graph display of a parameter page
+* ``RollingAverage`` -- moving-average smoothing for noisy knob reads
 
 Documentation
 =============
