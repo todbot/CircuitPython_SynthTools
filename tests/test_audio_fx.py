@@ -236,6 +236,39 @@ ck(hpf.filter[-1].frequency == 80.0,
    "stands in for fixed coupling caps and must not follow the sweep, "
    "got %r" % (hpf.filter[-1].frequency,))
 
+# --- spread: mismatched stages, and no rooting needed --------------------
+# Identical cascaded sections stack their resonant peaks on one frequency;
+# a real ladder's poles are spread out. Measured on rp2040: an offset node
+# reachable ONLY through a Biquad inside an audiofilters.Filter tracks the
+# sweep exactly, while one reachable from nothing reads 0.0 forever. So
+# nesting counts across the audiofilters boundary and synthesizer.blocks
+# stays out of it.
+
+flat = tracking_filter(make(), stages=3)
+ck(all(b.frequency is flat.filter[0].frequency for b in flat.filter),
+   "spread 1.0 (the default) must share ONE node across every stage and "
+   "allocate nothing")
+
+sp_syn = make()
+sp_syn.filter  # build the synth's own cutoff node first: it roots itself
+rooted_before = len(sp_syn.synthio.blocks)
+sp = tracking_filter(sp_syn, stages=3, spread=1.189)
+ck(sp.filter[0].frequency is sp_syn.filter.frequency,
+   "the FIRST stage must still be the synth's own cutoff node, unoffset")
+ck(sp.filter[1].frequency is not sp_syn.filter.frequency
+   and sp.filter[2].frequency is not sp_syn.filter.frequency,
+   "the later stages must each get their own offset node")
+ck(abs(sp.filter[1].frequency.value / sp_syn.filter.frequency.value - 1.189) < 1e-6,
+   "stage 1 must sit `spread` above the cutoff, got %r"
+   % (sp.filter[1].frequency.value / sp_syn.filter.frequency.value,))
+ck(abs(sp.filter[2].frequency.value / sp_syn.filter.frequency.value - 1.189 ** 2) < 1e-6,
+   "...and each stage after it another `spread` above the last")
+ck(all(b.Q is sp_syn._filt_q_blk for b in sp.filter),
+   "an offset stage must still share the live resonance block")
+ck(len(sp_syn.synthio.blocks) == rooted_before,
+   "an offset node must NOT be rooted: it is reachable through the "
+   "audiofilters Biquad, and rooting it here would leak one per rebuild")
+
 hpf_only = tracking_filter(make(filt_type=None), stages=0, hpf_f=80.0)
 ck(len(hpf_only.filter) == 1,
    "stages=0 with an hpf_f must build the high-pass alone, and must not "
@@ -333,8 +366,10 @@ ck(echo_syn.fx.effects[0].delay_ms == 250 and echo_syn.fx.effects[0].mix == 0.4
 
 full_syn = make(fx_filter_stages=1, fx_distortion_on=True, fx_echo_on=True)
 kinds = [type(e).__name__ for e in full_syn.fx.effects]
-ck(kinds == ["Filter", "Distortion", "Echo"],
-   "the owned chain's order must be fixed: filter, then distortion, then echo")
+ck(kinds == ["Distortion", "Filter", "Echo"],
+   "the owned chain's order must be fixed: distortion, then filter, then "
+   "echo. Drive comes first because the real ladder saturates INSIDE the "
+   "filter, so at least the extra stages should sit downstream of it")
 
 # --- live knobs reach an already-built chain without disturbing identity,
 

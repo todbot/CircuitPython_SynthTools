@@ -9,21 +9,41 @@
 # One of three focused demos split out of a single, too-broad one; see
 # synthtools_bassline_accent_demo.py (slide/accent) and
 # synthtools_bassline_fx_demo.py (distortion/echo) for the rest. Runs the
-# voice through BasslineSynth's owned extra filter stage (24 dB/octave, see
-# fx_filter_stages below) so the squelch this demo is about is at its
-# sharpest; that stage is set once and not itself swept.
+# BARE voice, 12 dB/octave: the owned extra filter stage would sharpen the
+# squelch, but an audiofilters.Filter costs enough rp2040 CPU to swing the
+# step timing by +/-11ms, and a demo about envelope shape needs a steady
+# grid more than it needs a steeper slope. See the patch below.
 #
 # BasslineSynth is monophonic and takes the TB-303's two per-step flags
 # (slide, accent); this demo's PATTERN uses them for an authentic feel but
 # doesn't sweep either knob -- see synthtools_bassline_accent_demo.py for
 # that.
 
+import microcontroller
+
+# 200 MHz, up from the 125 MHz boot default. The main loop shares the CPU
+# with the audio renderer, so the headroom shows up as steadier step
+# timing, not just as spare cycles. Set BEFORE synth_setup is imported:
+# rp2040's I2S clock is derived from sys_clk, so changing it afterwards
+# would move the sample rate out from under the audio that is already
+# running. Same placement as synthtools_wavetable_chords.py.
+microcontroller.cpu.frequency = 200_000_000
+
 import time
 
-from synth_setup import knobA, mixer
+from synth_setup import mixer
 from synth_setup import synth as engine
 
 from synthtools import BasslineSynth, Patch
+
+try:
+    from supervisor import ticks_ms
+except ImportError:  # desktop CPython, for a syntax check
+
+    def ticks_ms():
+        """stand-in for supervisor.ticks_ms"""
+        return time.monotonic_ns() // 1_000_000
+
 
 # --- the patch ----------------------------------------------------------
 # The classic squelch is a big downward sweep from a bright starting point.
@@ -38,17 +58,20 @@ patch = Patch(
     wave="SAW",  # "SQU" is the 303's other switch position
     filt_type="LPF",
     filt_f=1200,  # the PEAK the sweep starts from
-    filt_q=1.8,  # squelch lives here; push it up toward 3-4
+    # filt_q up at 4.0: on this engine resonance also drives how DEEP an
+    # accent sweeps and how fast it arrives, and at 1.8 the lag is ~9ms
+    # and inaudible. accent_cutoff is scaled to match: the accent boost is
+    # multiplied by (0.35 + 0.65*resonance), so 5268 at this filt_q lands
+    # the same Hz that a flat 4000 used to.
+    filt_q=4.0,  # squelch lives here
     envmod=0.75,
     # THE TWO NUMBERS THAT DECIDE WHETHER YOU HEAR envmod AT ALL.
     #
     # fenv_attack is the filter FALL time, and it must be shorter than the
-    # gate (GATE * the current step's duration, and knobA sweeps that live --
-    # see BPM_MIN/BPM_MAX below) or the sweep is cut off partway: at 0.28s it
-    # only got 23% of the way down at this file's original fixed tempo, so
-    # envmod=0.75 moved 0.74 octaves instead of 2.0, and envmod=0.2 moved
-    # 0.16; i.e. nothing. At 0.09s the sweep completes inside the note across
-    # nearly all of knobA's range; see the GATE comment for where it doesn't.
+    # gate (GATE * the step, 123ms here) or the sweep is cut off partway: at
+    # 0.28s it only got 23% of the way down, so envmod=0.75 moved 0.74
+    # octaves instead of 2.0, and envmod=0.2 moved 0.16; i.e. nothing. At
+    # 0.09s the sweep completes comfortably inside the note.
     #
     # The amp decay must be LONGER than that, so the note is still loud
     # while the cutoff falls. Equal times sound like one gesture (a
@@ -66,29 +89,26 @@ patch = Patch(
     # what an accented step gets, on top of the above -- see
     # synthtools_bassline_accent_demo.py; not swept here.
     accent=0.6,
-    accent_cutoff=4000,
+    accent_cutoff=5268,
     accent_q=0.8,
     amp_level=0.75,
     slide_time=0.09,
     transpose=0,
-    # A synthio.Note holds ONE Biquad, so the voice alone is 12 dB/octave;
-    # one extra stage makes 24, where the squelch this demo is about really
-    # lives. The stage tracks synth.filter's cutoff AND resonance on its
-    # own, so it follows every filt_f/filt_q/envmod change below with
-    # nothing to keep in sync by hand: see fx_filter_stages in
-    # bassline_synth.py. (Distortion and echo are their own demo: see
-    # synthtools_bassline_fx_demo.py.)
-    fx_filter_stages=1,
+    # NO fx chain here, and that is a timing decision, not a taste one.
+    # An audiofilters.Filter costs enough rp2040 CPU to displace the main
+    # loop: measured on this rig at 130bpm, steps land within 5ms of the
+    # grid playing synth.synthio, and swing +/-11ms the moment a Filter is
+    # in the chain (a bigger fx buffer makes it worse, not better). This
+    # demo is about the VOICE's own filter, so it takes the steady timing
+    # and leaves the extra stages and the post-filter high-pass to
+    # synthtools_bassline_fx_demo.py.
+    fx_hpf_f=0,
+    fx_filter_stages=0,
 )
 
 synth = BasslineSynth(engine, patch)
 
-try:
-    mixer.voice[0].play(synth.output)  # replaces synth_setup's direct hookup
-    print("filter: 24 dB/octave (1 extra stage)")
-except ImportError as e:
-    print("%s -- falling back to the bare voice filter (12 dB/oct)" % e)
-    mixer.voice[0].play(synth.synthio)
+mixer.voice[0].play(synth.synthio)  # replaces synth_setup's direct hookup
 
 # --- the pattern --------------------------------------------------------
 # (midi_note, slide, accent), or None for a rest.
@@ -98,32 +118,28 @@ PATTERN = (
     (48, True, False),
     (36, False, False),
     (39, False, True),
-    None,
+    (36, True, False),
+    (43, False, False),
     (36, False, False),
-    (43, True, False),
     (36, False, True),
+    (41, True, True),
     (36, False, False),
-    (29, True, False),  # the other slides go up; this one goes down
-    (36, False, False),  # back to the root, not a big jump: lets the down-slide land
-    (39, False, True),
-    (36, False, False),
-    None,
+    (48, False, True),
+    (36, True, False),
     (34, False, False),
+    (36, False, False),
+    (43, False, True),
 )
 
-# knobA sweeps bpm continuously across this range; see bpm_to_step() below.
-BPM_MIN, BPM_MAX = 80, 160
+BPM = 110
+STEP_MS = int(60_000 / BPM / 4)  # sixteenth notes, in ms
 # Long gate on purpose: the filter sweep only happens while the note is
 # held, so a short gate truncates it. GATE*held must stay >= fenv_attack
-# (0.09s), which holds up to 150 bpm (held 90ms, exactly fenv_attack) but
-# not past it: at BPM_MAX=160, held is only 84ms, so the sweep gets ~93% of
-# the way down at the fastest knob setting -- mild, not the ~23% seen
-# elsewhere in this file with a badly mismatched fenv_attack, but real.
+# (0.09s): here held is 123ms, comfortably clear. A knobA bpm sweep used to
+# live here, but a tempo that moves while you are trying to judge envelope
+# shape is one variable too many, and above ~150bpm the gate stops clearing
+# fenv_attack anyway.
 GATE = 0.9  # fraction of a step a note is held for
-
-
-def bpm_to_step(bpm):
-    return 60.0 / bpm / 4  # sixteenth notes
 
 
 # Each entry is (label, function), applied for BARS_PER_CHANGE bars each.
@@ -136,7 +152,10 @@ CHANGES = (
     ("envmod 0.2, barely any sweep", lambda: setattr(synth, "envmod", 0.2)),
     ("envmod 1.0, sweeps all the way shut", lambda: setattr(synth, "envmod", 1.0)),
     ("envmod 0.75", lambda: setattr(synth, "envmod", 0.75)),
-    ("filt_q 3.6, squelch", lambda: setattr(synth, "filt_q", 3.6)),
+    # down from the patch's 4.0, not up: it also thins the accent, since
+    # resonance drives the accent sweep's depth on this engine
+    ("filt_q 1.8, less squelch and a milder accent", lambda: setattr(synth, "filt_q", 1.8)),
+    ("filt_q 4.0", lambda: setattr(synth, "filt_q", 4.0)),
     # 0.03 collapses inside ONE 11.6ms render block at this rig's 22050 Hz
     # (256-sample blocks), once fenv_curve=3's front-loaded shape is
     # accounted for: 1-(1-t)^3 is already 77% done after the first block,
@@ -159,40 +178,71 @@ CHANGES = (
     ('wave "SAW"', lambda: setattr(synth, "wave", "SAW")),
 )
 
-print("bassline filter demo: %d steps, knobA sweeps %d-%d bpm" % (len(PATTERN), BPM_MIN, BPM_MAX))
+print("bassline filter demo: %d steps at %d bpm" % (len(PATTERN), BPM))
+
+# The loop schedules off monotonic_ns and ACCUMULATES the step interval
+# rather than sleeping for it. Sleeping drifts: the note_on/note_off work
+# (~5.7ms on an rp2040) lands on top of every sleep, so a 113ms step ran at
+# 119ms, about 5% slow, and nothing ever caught it back up. Accumulating
+# step_at absorbs the work instead. The 1ms sleep keeps the poll from
+# spinning flat out and competing with the audio render.
+#
+# It also has to be one flat loop rather than a for-loop over PATTERN: a
+# step that TIES into the next one holds its gate open past its own step,
+# so the note-off has to be scheduled independently of where the sequence
+# has got to.
+
+# Timing follows the house sequencer idiom (trig_sequencer.py): poll as
+# fast as possible on ticks_ms, accumulate the step interval so the work
+# in a step is absorbed rather than added to it, and RESYNC if a stall put
+# us a whole step behind instead of burst-firing to catch up.
+#
+# ticks_ms, not time.monotonic_ns: past boot monotonic_ns exceeds 2**30, so
+# every call allocates a bigint -- measured 21us and ~0.5 bytes a call
+# against 13us and none, which at poll rates is real GC churn, and a GC
+# pause lands as a late step.
+#
+# It also has to be one flat loop rather than a for-loop over PATTERN: a
+# step that TIES into the next one holds its gate open past its own step,
+# so the note-off has to be scheduled independently of where the sequence
+# has got to.
 
 bar = 0
-while True:
-    for i, step in enumerate(PATTERN):
-        # Named note_step, NOT step: the for-loop above already owns that
-        # name for the current PATTERN entry, and shadowing it here once
-        # cost a `TypeError: unsupported types for __mul__: 'tuple',
-        # 'float'` two lines down, from `step * GATE` silently multiplying
-        # the pattern tuple instead of a duration.
-        bpm = BPM_MIN + (knobA.value / 65535) * (BPM_MAX - BPM_MIN)
-        note_step = bpm_to_step(bpm)
+i = 0
+sounding = None
+gate_off_at = None
+next_step = ticks_ms()
 
+while True:
+    now = ticks_ms()
+
+    if gate_off_at is not None and now - gate_off_at >= 0:
+        synth.note_off(sounding)
+        sounding = gate_off_at = None
+
+    if now - next_step >= 0:
+        step_millis = STEP_MS
         if i == 0:
             if bar % BARS_PER_CHANGE == 0:
                 label, apply = CHANGES[(bar // BARS_PER_CHANGE) % len(CHANGES)]
-                print("bpm:%d %s" % (bpm, label))
+                print("  %s" % label)
                 apply()
             bar += 1
 
-        if step is None:  # a rest
-            time.sleep(note_step)
-            continue
+        step = PATTERN[i]
+        if step is not None:
+            note, slide, accent = step
+            synth.note_on_step(note, slide=slide, accent=accent)
+            sounding = note
+            # A slid step TIES to the one before it, and can only do that
+            # while that one is still sounding. So hold the gate open across
+            # the whole step whenever the NEXT one slides; releasing would
+            # leave the tie with nothing to tie to and it would retrigger.
+            nxt = PATTERN[(i + 1) % len(PATTERN)]
+            hold = nxt is not None and nxt[1]
+            gate_off_at = None if hold else now + int(step_millis * GATE)
 
-        note, slide, accent = step
-        synth.note_on_step(note, slide=slide, accent=accent)
-        # A slid step TIES to the one before it, and can only do that while
-        # that one is still sounding. So hold the gate open across the whole
-        # step whenever the NEXT one slides; releasing here would leave the
-        # tie with nothing to tie to and it would retrigger instead.
-        nxt = PATTERN[(i + 1) % len(PATTERN)]
-        if nxt is not None and nxt[1]:
-            time.sleep(note_step)
-        else:
-            time.sleep(note_step * GATE)
-            synth.note_off(note)
-            time.sleep(note_step * (1.0 - GATE))
+        i = (i + 1) % len(PATTERN)
+        next_step += step_millis
+        if next_step < now:  # a stall put us a whole step behind: resync
+            next_step = now + step_millis

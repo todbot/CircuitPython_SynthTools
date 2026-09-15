@@ -53,6 +53,29 @@
 #    still one write and still reaches a sounding note, while filt_f and
 #    filt_q read back clean. Only fenv_amount has no spare slot; it is
 #    derived from envmod anyway, so _decompile() re-derives it on save.
+#
+#    _filt_sum.c holds ONE LFO, _accent_lag, doing both jobs an LFO's two
+#    inputs allow:
+#
+#        offset  the env-mod DC term, always present
+#        scale   the accent boost, which the ramp carries IN over ACCENT_LAG
+#                seconds: the lag circuit resonance routes an accent
+#                through, and the "wow" of the acid sound
+#
+#    The obvious SUM(bias, PRODUCT(accent, lag)) spelling is two extra Math
+#    blocks that buy nothing, and they are not free: every block in the
+#    graph is re-evaluated each render, and those two measured ~110 us per
+#    note-on in stolen interpreter time.
+#
+#    Accent is a VOLTAGE on the cutoff bus, so it scales BOTH sweep
+#    endpoints and the sweep keeps its octave depth. Lifting only the top
+#    left an accented note with 0.49 octaves of movement against an
+#    un-accented 2.0: it read as the accent breaking the filter.
+#
+#    The accent circuit also has MEMORY -- an RC sweep whose capacitor does
+#    not discharge between steps -- so consecutive accents stack into a
+#    rising staircase and the steps after them fade back. See
+#    _strike_accent(); accent_sweep_decay is the knob.
 
 from math import exp
 
@@ -101,11 +124,27 @@ class BasslineSynth(Synth):
     phase, unlike SubtractiveSynth: a monosynth has no second oscillator
     to beat against, so a note-on allocates no waveform at all.
 
+    An accented step raises cutoff, resonance, envelope depth and level
+    together, and the accent circuit has memory: consecutive accents stack
+    into a rising staircase and the steps after them fade back rather than
+    snapping (``accent_sweep_decay``). ``filt_q`` drives how deep the
+    accent goes and how fast it arrives, which is the least obvious thing
+    in the original: its Resonance pot is dual-gang and its second half is
+    the INPUT to the accent sweep. ``accent_q``, accent raising resonance,
+    is the disputed direction and defaults low; see its docstring.
+
     ``envmod`` is the source of truth for the filter envelope's depth.
     ``fenv_amount`` is derived from it and from ``filt_f``, so writing
     ``fenv_amount`` directly is overwritten by the next change to either.
     Likewise ``decay`` owns ``fenv_attack``, since an accented step
     overwrites the live value with ``ACCENT_FALL``.
+
+    Several class attributes are read when the patch compiles, so set them
+    BEFORE constructing, like ``FILT_F_MAX``: ``ENV_BIAS``,
+    ``ENVMOD_RANGE``, ``ACCENT_LAG`` and ``FILT_SPREAD``.
+
+    The owned effects chain is optional and costs nothing until asked for:
+    see ``output`` and the ``fx_*`` fields.
     """
 
     # fmt: off
@@ -167,6 +206,14 @@ class BasslineSynth(Synth):
     #: dual-gang and its second half is what drives the sweep circuit.
     Q_MIN = 0.6
     Q_MAX = 6.0
+
+    #: Ratio each owned filter stage sits above the last. Stinchcombe's
+    #: normalisation factor for the TB-303 ladder, whose bottom capacitor is
+    #: half the value of the other three: the poles are spread and real-axis
+    #: rather than a clean Butterworth cluster, which is why the "18 or 24
+    #: dB/octave" argument never resolves. A class attribute, not a knob:
+    #: it is one measured number.
+    FILT_SPREAD = 1.189
 
     # class attrs: Synth.__init__ builds its graph, and calls _make_env(),
     # before this subclass has run any setup of its own
@@ -333,11 +380,8 @@ class BasslineSynth(Synth):
         p.fx_delay_decay = self._fx_delay_decay
 
     # --- the shared filter ------------------------------------------------
-    # Mono, so ONE Biquad and one cutoff node serve every note: built once
-    # and re-aimed, not allocated per note the way poly forces Synth to.
-    # Holding still is what lets audio_fx point extra stages at this cutoff
-    # once and have them track forever.
-
+    # Mono, so ONE Biquad and one cutoff node serve every note:
+    # built once and re-aimed, not allocated per note.
     def _build_filter(self):
         """Create the shared cutoff node and Biquad, once."""
         if self._filt_mode is None:
@@ -390,10 +434,19 @@ class BasslineSynth(Synth):
 
     # --- the owned effects chain (optional) -------------------------------
     # A specialized EffectsChain, not the general-purpose one: fixed order
-    # (filter -> distortion -> echo, the acid-bass signal flow), built from
-    # the same tracking_filter()/set_drive() free functions. The three
-    # fx_*_on/fx_filter_stages fields are STRUCTURAL, deciding what exists;
-    # everything else is a LIVE write into whatever is already built.
+    # (distortion -> filter -> echo), built from the same
+    # tracking_filter()/set_drive() free functions. The four structural
+    # fields decide what exists; everything else is a LIVE write into
+    # whatever is already built.
+    #
+    # Distortion comes FIRST because the real ladder's nonlinearity is
+    # INSIDE the filter: without self-oscillation, that saturation is the
+    # entire source of a 303's bite. synthio cannot put distortion inside
+    # the voice's own Biquad, so the closest available arrangement is to
+    # put it ahead of the extra stages, which at least leaves half the
+    # filtering downstream of the clipping rather than none of it. A
+    # side effect worth having: fx_hpf_f rides in the same Filter as those
+    # stages, so it also sheds the low end the distortion just generated.
 
     def _fx_cfg(self):
         s = self.synthio
@@ -423,13 +476,6 @@ class BasslineSynth(Synth):
         # internally we do, so drop the tracking stages rather than let that
         # surface from an `output` property read. The high-pass tracks
         # nothing, so it survives a filterless voice on its own.
-        want_stages = self._fx_filter_stages if self._filt_mode is not None else 0
-        if want_stages or self._fx_hpf_f:
-            stage = chain.add(
-                tracking_filter(
-                    self, stages=want_stages, mix=self._fx_filter_mix, hpf_f=self._fx_hpf_f
-                )
-            )
         if self._fx_distortion_on:
             if audiofilters is None:
                 raise ImportError("audiofilters is not in this CircuitPython build")
@@ -439,6 +485,17 @@ class BasslineSynth(Synth):
                 soft_clip=True, pre_gain=0, post_gain=0, **self._fx_cfg()))
             # fmt: on
             set_drive(dist, self._fx_drive)
+        want_stages = self._fx_filter_stages if self._filt_mode is not None else 0
+        if want_stages or self._fx_hpf_f:
+            stage = chain.add(
+                tracking_filter(
+                    self,
+                    stages=want_stages,
+                    mix=self._fx_filter_mix,
+                    hpf_f=self._fx_hpf_f,
+                    spread=self.FILT_SPREAD,
+                )
+            )
         if self._fx_echo_on:
             if audiodelays is None:
                 raise ImportError("audiodelays is not in this CircuitPython build")
@@ -498,10 +555,9 @@ class BasslineSynth(Synth):
     def _refresh_accent_depth(self):
         """Recompute the accent boost per unit of sweep.
 
-        Resonance sets how deep the sweep goes: the least obvious thing in
-        the box, since the Resonance pot is dual-gang and its second half
-        is the INPUT to the accent sweep circuit rather than something
-        accent modulates.
+        Resonance sets how deep the sweep goes. In the original TB-303,
+        the Resonance pot is dual-gang and its second half is the INPUT
+        to the accent sweep circuit rather than something accent modulates.
 
         Cached because ``filt_q`` and ``accent_cutoff`` move on a knob
         turn, not per step, and this runs in the note-on path: measured on
@@ -510,11 +566,10 @@ class BasslineSynth(Synth):
         n = (self._filt_q_blk.a - self.Q_MIN) / (self.Q_MAX - self.Q_MIN)
         res = 0.0 if n < 0.0 else (1.0 if n > 1.0 else n)
         self._acc_hz = self._accent_cutoff * (0.35 + 0.65 * res)
-        # ...and how long the sweep takes to arrive. Anti-clockwise the
-        # accent is a direct pulse; clockwise it goes through a lag, and
-        # that upward ramp into the note is the acid "wow". A rate, so it
-        # is cheap, and it lands here rather than in _refresh_accent()
-        # because only resonance moves it.
+        # ...and how long the sweep takes to arrive. Turned down, the accent
+        # is a direct pulse; turned up and it goes through a lag, and that
+        # upward ramp into the note is the acid "wow". A rate, so it is cheap.
+        # It's here instead of _refresh_accent() because only resonance moves it.
         self._accent_lag.rate = 1.0 / (0.001 + res * self.ACCENT_LAG)
 
     def _refresh_accent(self):
@@ -534,9 +589,9 @@ class BasslineSynth(Synth):
         # the decay half of the staircase.
         sweep = self._accent_sweep
         boost = self._acc_hz * sweep
-        # Accent raising resonance is the disputed direction: forum accounts
-        # say it does, Whittle's circuit reading says resonance drives the
-        # sweep instead. Kept small as a musical extra, defaulting low.
+        # Accent raising resonance is disputed: forum say it does,
+        # Whittle's circuit reading says resonance drives the sweep instead.
+        # Kept small as a musical extra, defaulting low.
         self._filt_q_blk.b = self._accent_q * sweep
         # The shortened fall is per-STEP, not swept: an accented step's
         # envelope decay is pinned short whatever the Decay knob says. This
