@@ -306,8 +306,8 @@ class BasslineSynth(Synth):
         self._accent_sweep_decay = getattr(p, "accent_sweep_decay", 0.55)
         self._accent_sweep_max = getattr(p, "accent_sweep_max", 1.6)
         self._slide_time = getattr(p, "slide_time", 0.06)
-        self._decay = p.fenv_attack  # super() already wrote it into the block
-        self._fall = p.fenv_attack  # ...and that is what the block holds
+        self._decay = getattr(p, "decay", p.fenv_attack)
+        self._fall = p.fenv_attack  # what super() wrote into the block
         get_wave(self._wave_name)  # warm the cache; note-on only reads it
         self._accent_on = False
         self._accent_sweep = 0.0
@@ -368,6 +368,7 @@ class BasslineSynth(Synth):
         peak, rest = self._env_endpoints()  # un-accented: no sweep widening
         p.fenv_amount = rest - peak
         p.fenv_attack = self._decay
+        p.decay = self._decay
         p.fx_filter_stages = self._fx_filter_stages
         p.fx_filter_mix = self._fx_filter_mix
         p.fx_hpf_f = self._fx_hpf_f
