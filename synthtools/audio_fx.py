@@ -26,9 +26,13 @@
 # Identical resonant sections stacked this way do pile up gain at the cutoff,
 # each stage adding its own peak on top of the last. At a squelchy filt_q
 # that is real headroom to watch, and also most of why a cascaded resonant
-# filter reads as more aggressive than a single one.
+# filter reads as more aggressive than a single one. tracking_filter()'s
+# `spread` is the lever: offsetting the stages spreads those peaks out the
+# way a real ladder's mismatched poles do.
 
 import synthio
+
+from .blocks import product
 
 try:
     import audiofilters
@@ -103,33 +107,66 @@ class EffectsChain:
             src = stage
 
 
-def tracking_filter(synth, stages=1, buffer_size=1024, mix=1.0):
+def tracking_filter(synth, stages=1, buffer_size=1024, mix=1.0, hpf_f=None, spread=1.0):
     """Build one ``audiofilters.Filter`` holding ``stages`` extra Biquads
     that track ``synth.filter``'s cutoff AND resonance; see the module
     comment for why that's automatic once they share the live blocks.
     ``stages`` extra 12 dB/octave sections plus the synth's own give
     ``12*(stages+1)`` overall.
 
+    ``spread`` offsets each stage's cutoff above the last by that ratio,
+    approximating a real ladder's wide pole spread instead of stacking
+    identical resonant peaks on one frequency; 1.0 shares one node and
+    allocates nothing.
+
+    ``hpf_f`` adds a fixed high-pass section at that frequency in Hz, in
+    the SAME biquad tuple, so it costs no extra buffer and no extra pass.
+    It is a plain number rather than a shared block on purpose: it must
+    not follow the cutoff. A TB-303's thin bass comes from small coupling
+    capacitors between the filter and the VCA, which sit at one corner
+    whatever the filter is doing. ``stages=0`` is legal with it, for a
+    high-pass alone.
+
     Raises ``ImportError`` if this build has no ``audiofilters``,
-    ``ValueError`` if ``stages < 1`` or ``synth`` has no filter to track
-    (either a poly synth, which has no ``.filter`` at all, or a mono one
-    built with ``filt_type=None``).
+    ``ValueError`` if ``stages < 1`` without an ``hpf_f``, or if tracking
+    stages were asked for and ``synth`` has no filter to track (either a
+    poly synth, which has no ``.filter`` at all, or a mono one built with
+    ``filt_type=None``).
     """
     if audiofilters is None:
         raise ImportError("audiofilters is not in this CircuitPython build")
-    if stages < 1:
+    if stages < 1 and not hpf_f:
         raise ValueError("stages must be >= 1")
     src = getattr(synth, "filter", None)
-    if src is None:
+    if stages >= 1 and src is None:
         raise ValueError("synth has no filter to track (mono-only, and filt_type must be set)")
     synthesizer = synth.synthio
     # Copies sharing src's frequency AND Q blocks, both live, so both track
     # the synth (sweep, accent, a filt_q turn) with nothing to keep in sync
     # by hand. One Filter holding a tuple, not a Filter each: `filter` runs
     # the sample through them in order, saving a buffer and a pass per stage.
-    biquads = tuple(
-        synthio.Biquad(src.mode, frequency=src.frequency, Q=src.Q) for _ in range(stages)
-    )
+    # `spread` offsets each stage above the last by that ratio. Identical
+    # cascaded sections pile their resonant peaks on one frequency; real
+    # ladder filters do not, and the TB-303's least of all, its bottom
+    # ladder capacitor being half the value of the other three. Mismatched
+    # stages approximate that wider pole spread and take the edge off the
+    # ringing. 1.0, the default, shares one node and allocates nothing.
+    #
+    # An offset node needs NO rooting: measured on rp2040, a Math reachable
+    # only through a Biquad inside an audiofilters.Filter tracks the sweep
+    # exactly, while an otherwise identical one reachable from nothing at
+    # all reads 0.0 forever. Nesting counts across the audiofilters
+    # boundary, so `synthesizer.blocks` stays out of this.
+    sections = []
+    ratio = 1.0
+    for _ in range(stages):
+        freq = src.frequency if ratio == 1.0 else product(src.frequency, ratio)
+        sections.append(synthio.Biquad(src.mode, frequency=freq, Q=src.Q))
+        ratio *= spread
+    biquads = tuple(sections)
+    if hpf_f:
+        # last, so it sheds low end from everything ahead of it
+        biquads += (synthio.Biquad(synthio.FilterMode.HIGH_PASS, frequency=hpf_f, Q=0.707),)
     return audiofilters.Filter(
         filter=biquads,
         mix=mix,
