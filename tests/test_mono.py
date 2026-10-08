@@ -674,6 +674,20 @@ ck(
     "outlive the sweep, which is what makes the sweep audible",
 )
 
+# `decay` is the 303-facing patch field; fenv_attack is the fallback for
+# patches written before it was read
+dk = make(decay=0.09)
+ck(dk.decay == 0.09, "a patch's decay must load, got %r" % dk.decay)
+ck(dk._fenv.attack == 0.09, "...and reach the block, got %r" % dk._fenv.attack)
+ck(make(fenv_attack=0.2).decay == 0.2, "no decay field must fall back to fenv_attack")
+dk.decay = 0.12
+dk.save_patch()
+ck(
+    dk.patch.decay == 0.12 and dk.patch.fenv_attack == 0.12,
+    "decay must save as both fields, got decay=%r fenv_attack=%r"
+    % (dk.patch.decay, dk.patch.fenv_attack),
+)
+
 # --- keyboard tracking on the ONE shared mono cutoff node ----------------
 # BasslineSynth reuses a single cutoff node across notes, re-aiming its
 # spare .b/.c inputs. That makes a STALE slot the real hazard: turning
