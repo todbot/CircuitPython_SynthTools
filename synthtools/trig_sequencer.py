@@ -11,15 +11,7 @@ Part of synthtools.
 
 """
 
-import time
-
-try:
-    from supervisor import ticks_ms
-except ImportError:
-
-    def ticks_ms():
-        """stand-in for supervisor.ticks_ms"""
-        return time.monotonic_ns() // 1_000_000
+from adafruit_ticks import ticks_add, ticks_diff, ticks_ms
 
 
 class TrigSequencer:
@@ -45,6 +37,7 @@ class TrigSequencer:
         self.drum_map = [0] * trig_count
         self.step_millis = 0  # real value once bpm is set; update()/start() need it to exist
         self.next_millis = 0
+        self._frac_millis = 0.0  # step_millis's fraction, carried between steps
 
     @property
     def bpm(self):
@@ -58,6 +51,7 @@ class TrigSequencer:
     def start(self):
         """Start sequencer going"""
         self.next_millis = ticks_ms()
+        self._frac_millis = 0.0
         self.playing = True
 
     def stop(self):
@@ -78,15 +72,19 @@ class TrigSequencer:
             return
 
         now = ticks_ms()
-        delta_millis = now - self.next_millis
 
-        if delta_millis >= 0:  # time to play
+        if ticks_diff(now, self.next_millis) >= 0:  # time to play
             for t in range(self.trig_count):
                 if self.trigs[t][self.i] == 1:
                     self.on_func(t, self.drum_map[t])
 
             # prep for next step in sequence
             self.i = (self.i + 1) % self.step_count
-            self.next_millis += self.step_millis
-            if self.next_millis < now:  # a stall put us a whole step behind: resync
-                self.next_millis = now + self.step_millis
+            # int ticks: they wrap at 2**29, first ~65 s after power-on, and a
+            # 30-bit float can't hold one that big to the ms
+            self._frac_millis += self.step_millis
+            step = int(self._frac_millis)
+            self._frac_millis -= step
+            self.next_millis = ticks_add(self.next_millis, step)
+            if ticks_diff(self.next_millis, now) < 0:  # a stall put us a whole step behind
+                self.next_millis = ticks_add(now, step)

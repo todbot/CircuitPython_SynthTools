@@ -33,6 +33,7 @@ autodoc_mock_imports = [
     "synthio",
     "ulab",
     "adafruit_wave",
+    "adafruit_ticks",
     "displayio",
     "vectorio",
     "micropython",

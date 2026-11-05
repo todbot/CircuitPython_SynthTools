@@ -11,15 +11,7 @@ Part of synthtools.
 
 """
 
-import time
-
-try:
-    from supervisor import ticks_ms
-except ImportError:
-
-    def ticks_ms():
-        """stand-in for supervisor.ticks_ms"""
-        return time.monotonic_ns() // 1_000_000
+from adafruit_ticks import ticks_add, ticks_diff, ticks_ms
 
 
 class StepSequencer:
@@ -46,8 +38,10 @@ class StepSequencer:
         self.held_note = None  # the current note playing
         self.transpose = 0
         self.playing = False  # is sequence running or not (but use .start()/.stop())
+        self.external_clock = False  # owner calls trigger(), update() only releases gates
+        self.catch_up_steps = 0  # how far behind to still play every step, late, not resync
         self.next_millis = 0
-        self.error_millis = 0
+        self._frac_millis = 0.0  # step_millis's fraction, carried between steps
 
     @property
     def bpm(self):
@@ -68,15 +62,49 @@ class StepSequencer:
     def start(self):
         """Start sequencer going"""
         self.next_millis = ticks_ms()
+        self._frac_millis = 0.0
         self.playing = True
-        self.error_millis = 0
 
-    def stop(self):
-        """Stop sequencer, turning off any currently-sounding note"""
+    def pause(self):
+        """Pause sequencer where it is, turning off any currently-sounding note"""
         if self.held_note:
             self.off_func(*self.held_note)
+            self.held_note = None
         self.playing = False
+
+    def stop(self):
+        """Stop sequencer and rewind, turning off any currently-sounding note"""
+        self.pause()
         self.i = 0
+
+    def trigger(self, now=None):
+        """Play the current step and advance, for an owner keeping its own clock"""
+        if now is None:
+            now = ticks_ms()
+        if self.i >= self.step_count:  # step_count shrank under us
+            self.i = 0
+        (note, vel, gate, on) = self.steps[self.i]  # get new note to play
+        note += self.transpose  # adjust for transpose
+        self.held_note = (note, vel, gate, on)  # save it for when we note_off it
+
+        # trigger new note
+        self.on_func(*self.held_note)  # held_note = (note,vel,gate,on)
+
+        # prep for next step in sequence
+        self.i = (self.i + 1) % self.step_count
+
+        # int ticks: they wrap at 2**29, first ~65 s after power-on, and a
+        # 30-bit float can't hold one that big to the ms
+        self._frac_millis += self.step_millis
+        step = int(self._frac_millis)
+        self._frac_millis -= step
+        self.next_millis = ticks_add(self.next_millis, step)
+        # a stall put us too far behind
+        if ticks_diff(self.next_millis, now) < -self.catch_up_steps * step:
+            self.next_millis = ticks_add(now, step)
+        # next note off is some percentage smaller
+        gate = int(self.step_millis * self.held_note[2])
+        self.gate_off_millis = ticks_add(now, gate)
 
     def update(self):
         """Update the sequencer. Call as frequently as possible"""
@@ -84,30 +112,11 @@ class StepSequencer:
             return
 
         now = ticks_ms()
-        delta_millis = now - self.next_millis
 
         # trigger note-off after gate time
-        if now - self.gate_off_millis >= 0 and self.held_note:
+        if self.held_note and ticks_diff(now, self.gate_off_millis) >= 0:
             self.off_func(*self.held_note)
             self.held_note = None
 
-        if delta_millis >= 0:  # if zero or great, time for next step
-            # print("                      delta_millis:", delta_millis, self.error_millis)
-            self.error_millis += delta_millis
-            (note, vel, gate, on) = self.steps[self.i]  # get new note to play
-            note += self.transpose  # adjust for transpose
-            self.held_note = (note, vel, gate, on)  # save it for when we note_off it
-
-            # trigger new note
-            self.on_func(*self.held_note)  # held_note = (note,vel,gate,on)
-
-            # prep for next step in sequence
-            self.i = (self.i + 1) % self.step_count
-
-            # set up when next note on is, with some error correction
-            self.next_millis = now + self.step_millis
-            if self.error_millis > 1:
-                self.next_millis -= self.error_millis
-                self.error_millis = 0
-            # next note off is some percentage smaller
-            self.gate_off_millis = now + self.step_millis * self.held_note[2]
+        if not self.external_clock and ticks_diff(now, self.next_millis) >= 0:
+            self.trigger(now)

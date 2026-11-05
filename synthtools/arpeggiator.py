@@ -11,16 +11,7 @@ Part of synthtools.
 
 """
 
-import time
-
-try:
-    from supervisor import ticks_ms
-except ImportError:
-
-    def ticks_ms():
-        """stand-in for supervisor.ticks_ms"""
-        return time.monotonic_ns() // 1_000_000
-
+from adafruit_ticks import ticks_add, ticks_diff, ticks_ms
 
 patterns = (
     (0, 4, 7, 12),
@@ -68,6 +59,7 @@ class Arpeggiator:
         self.held_note = None
         self.next_millis = 0
         self.held_millis = 0
+        self._frac_millis = 0.0  # step_millis's fraction, carried between steps
 
     def set_bpm(self, bpm, rate=None):
         """Set BPM and optionally rate"""
@@ -90,6 +82,7 @@ class Arpeggiator:
     def start(self):
         """Start the arpeggiator running"""
         self.next_millis = ticks_ms()
+        self._frac_millis = 0.0
         self.on = True
 
     def stop(self):
@@ -105,12 +98,12 @@ class Arpeggiator:
         now = ticks_ms()
 
         # trigger note-off after gate time
-        if self.held_note and now - self.held_millis > 0:
+        if self.held_note and ticks_diff(now, self.held_millis) > 0:
             self.off_func(self.held_note)
             self.held_note = None
 
         # trigger note-on on if time to do so
-        delta_millis = now - self.next_millis
+        delta_millis = ticks_diff(now, self.next_millis)
         if delta_millis >= 0 and len(self.notes) > 0:  # time for new note
             note = self.notes[self.i] + self.oct_distance * self.octave
             # print("\t\t\t\t\t", "delta:",delta_millis)
@@ -120,8 +113,13 @@ class Arpeggiator:
             self.held_note = note  # save for note-off
 
             # set up when note off and next note happens
-            self.held_millis = now + (self.step_millis * self.gate)
-            self.next_millis = now + self.step_millis - delta_millis // 2
+            # int ticks: they wrap at 2**29, first ~65 s after power-on, and a
+            # 30-bit float can't hold one that big to the ms
+            self._frac_millis += self.step_millis
+            step = int(self._frac_millis)
+            self._frac_millis -= step
+            self.held_millis = ticks_add(now, int(self.step_millis * self.gate))
+            self.next_millis = ticks_add(now, step - delta_millis // 2)
 
             # go to next note
             self.i = (self.i + 1) % len(self.notes)

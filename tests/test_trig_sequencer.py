@@ -6,9 +6,9 @@ stop(), the aliasing set_pattern(), and the stall-recovery timing fix
 sequencer permanently slow; see CLAUDE.md/the trig_sequencer plan for
 the algebra).
 
-trig_sequencer.py imports only `time` (with a `supervisor.ticks_ms`
-shim), so like test_arpeggiator.py this runs on a bare interpreter: no
-stubs needed. ticks_ms is monkeypatched to a fake, settable clock so the
+trig_sequencer.py needs only adafruit_ticks, vendored unchanged in
+tests/lib/, so like test_arpeggiator.py this runs on a bare interpreter:
+no stubs needed. ticks_ms is monkeypatched to a fake, settable clock so the
 timing tests are exact and instant instead of racing real wall-clock
 sleeps.
 
@@ -20,6 +20,7 @@ import sys
 
 _D = __file__.rsplit("/", 1)[0] if "/" in __file__ else "."
 sys.path.insert(0, _D + "/../synthtools")  # direct: skips synthtools/__init__
+sys.path.insert(0, _D + "/lib")  # the real adafruit_ticks, vendored
 
 import trig_sequencer  # noqa: E402
 from trig_sequencer import TrigSequencer  # noqa: E402
@@ -35,8 +36,11 @@ def ck(cond, msg):
 _now = [0]
 
 
+WRAP = 1 << 29
+
+
 def fake_ticks_ms():
-    return _now[0]
+    return _now[0] % WRAP  # wraps like supervisor.ticks_ms()
 
 
 def set_time(ms):
@@ -135,6 +139,34 @@ ck(seq6.next_millis == 900 + 125,
 events.clear()
 seq6.update()
 ck(events == [], "polling again before the resynced deadline must not fire")
+
+# --- across the ticks_ms() wrap: no stop, no hiccup -----------------------
+# supervisor.ticks_ms() first wraps ~65 s after power-on
+times = []
+seq7 = TrigSequencer(1, 4, 4, on_func=lambda t, d: times.append(_now[0]))
+seq7.set_pattern([[1, 1, 1, 1]])
+seq7.bpm = 120
+set_time(WRAP - 600)
+seq7.start()
+while _now[0] < WRAP + 1000:
+    seq7.update()
+    _now[0] += 1
+gaps = [b - a for a, b in zip(times, times[1:])]
+ck(len(times) == 13 and min(gaps) == max(gaps) == 125,
+   "steps must keep coming every 125 ms across the wrap, got gaps %r" % gaps)
+
+# --- a tempo that isn't whole ms doesn't drift, and ticks stay int ---------
+times.clear()
+seq7.bpm = 113  # 132.743... ms/step
+set_time(0)
+seq7.start()
+while _now[0] < 100 * 132.743 + 1:
+    seq7.update()
+    _now[0] += 1
+ck(abs(times[100] - 100 * 60_000 / 4 / 113) < 1,
+   "100 steps at 113 bpm must land within 1 ms of 13274 ms, got %r" % times[100])
+ck(isinstance(seq7.next_millis, int),
+   "tick math must stay int; a 30-bit float can't hold a tick near 2**29")
 
 if fails:
     print("FAILURES (%d):" % len(fails))

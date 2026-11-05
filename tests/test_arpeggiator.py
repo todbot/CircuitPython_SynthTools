@@ -5,8 +5,8 @@ for the constructor bug fixed alongside this file: Arpeggiator.__init__
 called `self.set_bpm(120)` with no rate, which overwrote self.rate with
 set_bpm's own default (None) and raised TypeError on every construction.
 
-arpeggiator.py imports only `time` (with a `supervisor.ticks_ms` shim), so
-like test_patch.py this runs on a bare interpreter: no stubs needed.
+arpeggiator.py needs only adafruit_ticks, vendored unchanged in tests/lib/,
+so like test_patch.py this runs on a bare interpreter: no stubs needed.
 ticks_ms is monkeypatched to a fake, settable clock so the timing tests are
 exact and instant instead of racing real wall-clock sleeps.
 
@@ -18,6 +18,7 @@ import sys
 
 _D = __file__.rsplit("/", 1)[0] if "/" in __file__ else "."
 sys.path.insert(0, _D + "/../synthtools")  # direct: skips synthtools/__init__
+sys.path.insert(0, _D + "/lib")  # the real adafruit_ticks, vendored
 
 import arpeggiator  # noqa: E402
 from arpeggiator import Arpeggiator  # noqa: E402
@@ -33,8 +34,11 @@ def ck(cond, msg):
 _now = [0]
 
 
+WRAP = 1 << 29
+
+
 def fake_ticks_ms():
-    return _now[0]
+    return _now[0] % WRAP  # wraps like supervisor.ticks_ms()
 
 
 def set_time(ms):
@@ -161,6 +165,24 @@ ck(advance(325) == [("off", 67)], "release of the third note")
 ck(advance(375) == [("on", 60 + 12)],
    "next pass must transpose by oct_distance * octave")
 ck(arp4.i == 1, "i must advance normally within the transposed pass")
+
+# --- across the ticks_ms() wrap: no stop, no hiccup -----------------------
+# supervisor.ticks_ms() first wraps ~65 s after power-on
+ons, offs = [], []
+arp5 = Arpeggiator(4, lambda n: ons.append(_now[0]), lambda n: offs.append(_now[0]))
+arp5.set_bpm(120, 4)
+arp5.notes = [60]
+set_time(WRAP - 600)
+arp5.start()
+while _now[0] < WRAP + 1000:
+    arp5.update()
+    _now[0] += 1
+gaps = [b - a for a, b in zip(ons, ons[1:])]
+ck(len(ons) == 13 and min(gaps) == max(gaps) == 125,
+   "notes must keep coming every 125 ms across the wrap, got gaps %r" % gaps)
+ck(len(offs) == len(ons), "gates must keep releasing across the wrap, got %d" % len(offs))
+ck(isinstance(arp5.next_millis, int) and isinstance(arp5.held_millis, int),
+   "tick math must stay int; a 30-bit float can't hold a tick near 2**29")
 
 if fails:
     print("FAILURES (%d):" % len(fails))
