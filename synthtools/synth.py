@@ -101,6 +101,8 @@ class Synth:
     # block. Defensive rather than required: a negative Biquad.frequency
     # does NOT raise, but what such a filter *sounds* like is undefined.
     FILT_F_MIN = 20.0
+    # Capped per instance at 0.45 * sample_rate, since a Biquad above Nyquist
+    # is undefined and 20000 is above it at 22050. Read at construction.
     FILT_F_MAX = 20000.0
 
     #: MIDI note the keyboard tracking pivots around: at this pitch
@@ -109,6 +111,7 @@ class Synth:
 
     def __init__(self, synthesizer, patch=None):
         self.synthio = synthesizer
+        self.FILT_F_MAX = min(self.FILT_F_MAX, synthesizer.sample_rate * 0.45)
         self.voices = {}  # midi_note -> tuple of synthio.Note
         self.patch = None
         # Every shared block below is created ONCE and never replaced:

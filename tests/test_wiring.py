@@ -169,6 +169,19 @@ ck(abs(s._filt_base.value - s.FILT_F_MAX) < 1e-6,
    "an absurdly high filt_f must clamp to FILT_F_MAX, got %r" % s._filt_base.value)
 s.filt_f = 1000
 
+# --- FILT_F_MAX is capped under Nyquist by the synthesizer's sample rate ---
+s22 = SubtractiveSynth(synthio.Synthesizer(sample_rate=22050), Patch(filt_f=999999))
+ck(s22.FILT_F_MAX == 22050 * 0.45,
+   "FILT_F_MAX must cap at 0.45 * sample_rate, got %r" % s22.FILT_F_MAX)
+ck(abs(s22._filt_base.value - 22050 * 0.45) < 1e-6,
+   "the shared clamp must use the capped value, got %r" % s22._filt_base.value)
+ck(SubtractiveSynth.FILT_F_MAX == 20000.0,
+   "the cap must be per instance, not written back to the class")
+SubtractiveSynth.FILT_F_MAX = 5000.0
+ck(SubtractiveSynth(synthio.Synthesizer(sample_rate=22050)).FILT_F_MAX == 5000.0,
+   "a lower class-level FILT_F_MAX set before constructing must still win")
+del SubtractiveSynth.FILT_F_MAX
+
 env_obj = s._fenv
 lin_shape = vals(env_obj._wave)
 buf = env_obj._wave
