@@ -24,10 +24,11 @@
 import time
 
 from arpeggiator import Arpeggiator
+from synth_setup import mixer
 from synth_setup import synth as engine
 
 from synthtools import Patch, SubtractiveSynth
-from synthtools.waves import wave_names
+from synthtools.waves import warm_wave, wave_names
 
 DURATION = 3.0  # seconds per wave
 # DETUNE = 1.01  # ~17 cents: clearly audible in a 3s clip, still musical
@@ -44,6 +45,7 @@ patch = Patch(
 )
 
 synth = SubtractiveSynth(engine, patch)
+mixer.voice[0].level = 0.7  # 2x synth_setup's 0.35: makeup for SubtractiveSynth.HEADROOM
 
 # root, major third, fifth, octave, one bar of a plain major arpeggio
 root_note = 48  # C3
@@ -58,13 +60,17 @@ def note_off(midi_note):
     synth.note_off(midi_note)
 
 
+# wave_names = wave_names()
+# each *_BL right after its naive twin, for an aliasing A/B; built up front
+# because the first build of each takes a while and would stall the arp
+wave_names = ("SAW", "SAW_BL", "ASAW", "SQU", "SQU_BL", "ASQU", "SSQU")
+for wave_name in wave_names:
+    warm_wave(wave_name, engine.sample_rate)
+
 arp = Arpeggiator(120, note_on, note_off)
 arp.set_bpm(120, 4)  # 10bpm 16th notes, ~9 cycles of the 4-note pattern per DURATION
 arp.notes = arp_notes
 arp.start()
-
-# wave_names = wave_names()
-wave_names = ("SAW", "ASAW", "SQU", "ASQU", "SSQU")
 
 while True:
     synth.detune = 1.0

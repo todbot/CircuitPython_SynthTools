@@ -5,10 +5,17 @@
 #
 # Osc2 is a detuned copy of osc1; detune=1.0 collapses to a single osc.
 
+import math
+
 import synthio
 
 from .synth import Synth
-from .waves import get_wave_2x, random_phase_wave
+from .waves import random_phase_wave, warm_wave
+
+
+def _semis_above(ratio):
+    """Semitones a frequency ratio sits above unison, 0 for ratios <= 1."""
+    return round(12 * math.log(ratio) / math.log(2)) if ratio > 1.0 else 0
 
 
 class SubtractiveSynth(Synth):
@@ -16,13 +23,19 @@ class SubtractiveSynth(Synth):
     detuned second oscillator, through the shared Synth filter/envelope
     graph.
 
-    ``detune=1.0`` (the default) collapses to a single oscillator, so an
-    ordinary patch costs one Note per key; any other detune spends TWO
-    Notes per key (see the polyphony-budget note in the project docs).
-    Each oscillator gets its own random phase per note-on, and osc2 is
-    scaled down (60% of osc1) so a detuned voice's peak amplitude does not
-    exceed a single-oscillator one.
+    ``detune=1.0`` collapses to a single oscillator, one Note per key; any
+    other detune, the ``Patch`` default of 1.001 included, spends TWO Notes
+    per key (see the polyphony-budget note in the project docs).
+    Each oscillator gets its own random phase per note-on. A detuned voice
+    runs both oscillators at 0.666 of the single-osc level (by ear), so it
+    peaks at 1.33x a single-osc one; ``HEADROOM`` absorbs that.
     """
+
+    # synthio's mix bus soft-limits above +-28000, and one full-amplitude
+    # note already peaks at ~14000, so two keys reach the limiter. Make the
+    # level back at mixer.voice[0].level. Read per note-on, like
+    # WavetableSynth.WT_HEADROOM.
+    HEADROOM = 0.5
 
     _PARAMS = Synth._PARAMS + ("wave", "detune")
 
@@ -30,12 +43,14 @@ class SubtractiveSynth(Synth):
     # has run any setup of its own
     _wave_name = "SAW"
     _detune = 1.0
+    _detune_semis = 0
 
     def _recompile(self):
         super()._recompile()
         self._wave_name = self.patch.wave
         self._detune = self.patch.detune
-        get_wave_2x(self._wave_name)  # warm the cache; note-on only slices
+        self._detune_semis = _semis_above(self._detune)
+        warm_wave(self._wave_name, self.synthio.sample_rate)  # note-on only slices
 
     def _decompile(self):
         super()._decompile()
@@ -44,24 +59,25 @@ class SubtractiveSynth(Synth):
 
     def _make_notes(self, midi_note, velocity):
         f = synthio.midi_to_hz(midi_note)
-        amp = velocity / 127
+        sr = self.synthio.sample_rate
+        amp = velocity / 127 * self.HEADROOM
         detuned = self._detune and self._detune != 1.0
         # Each oscillator gets its OWN random start point in the wave's
         # cycle, rerolled every note-on; see waves.random_phase_wave().
-        # Rebalanced only when osc2 exists,
-        # so single-osc patches stay at full amp: with osc2 present the two
-        # sum to amp * 1.0 rather than amp * 1.6, which could exceed int16
-        # range on its own with both oscillators in phase, before the filter
-        # even sees it. 0.625/0.375 keeps osc2 at 60% of osc1's level.
+        # Osc2 picks a band-limited table for its own pitch, not osc1's:
+        # a detune of 1.5 is a fifth, past what the table's margin covers.
         # fmt: off
-        n1 = synthio.Note(f, waveform=random_phase_wave(self._wave_name),
+        n1 = synthio.Note(f, waveform=random_phase_wave(self._wave_name, midi_note=midi_note,
+                                                        sample_rate=sr),
                           envelope=self._env,
                           amplitude=amp * 0.666 if detuned else amp,
                           filter=self._make_filter(), bend=self._bend_cur)
         if detuned:
             n2 = synthio.Note(f * self._detune,
-                              waveform=random_phase_wave(self._wave_name),
-                              envelope=self._env, amplitude=amp * 0.666, #0.375,
+                              waveform=random_phase_wave(self._wave_name,
+                                                         midi_note=midi_note + self._detune_semis,
+                                                         sample_rate=sr),
+                              envelope=self._env, amplitude=amp * 0.666,
                               filter=self._make_filter(), bend=self._bend_cur)
             return (n1, n2)
         return (n1,)
@@ -74,7 +90,7 @@ class SubtractiveSynth(Synth):
     @wave.setter
     def wave(self, v):
         self._wave_name = v
-        get_wave_2x(v)  # O(1); warms the cache for the next note-on
+        warm_wave(v, self.synthio.sample_rate)  # warms the cache for the next note-on
 
     @property
     def detune(self):
@@ -85,6 +101,7 @@ class SubtractiveSynth(Synth):
         # genuinely per-note (each osc2 has its own frequency), so this one
         # cannot be a shared block: O(polyphony).
         self._detune = v
+        self._detune_semis = _semis_above(v)
         for notes in self.voices.values():
             if len(notes) > 1:
                 notes[1].frequency = notes[0].frequency * v

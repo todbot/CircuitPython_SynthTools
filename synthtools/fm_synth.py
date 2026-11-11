@@ -51,7 +51,7 @@ import synthio
 import ulab.numpy as np
 
 from .synth import Synth
-from .waves import fill_pm_wave, get_wave_2x, random_phase_wave
+from .waves import fill_pm_wave, random_phase_wave, warm_wave
 
 #: single-cycle size of the baked PM carrier table
 FM_WAVE_SIZE = 256
@@ -75,6 +75,10 @@ class FMSynth(Synth):
     filter/pitch envelope shape.
     """
 
+    # Same mix-bus limiter as SubtractiveSynth.HEADROOM: make the level back
+    # at mixer.voice[0].level. Read per note-on.
+    HEADROOM = 0.5
+
     _PARAMS = Synth._PARAMS + ("wave", "fm_ratio", "fm_index")
 
     # class attrs: base __init__ builds its graph before this subclass has run
@@ -94,7 +98,7 @@ class FMSynth(Synth):
         super()._recompile()
         p = self.patch
         self._wave_name = p.wave
-        get_wave_2x(self._wave_name)  # warm the carrier cache; note-on only slices
+        warm_wave(self._wave_name, self.synthio.sample_rate)  # note-on only slices
         self._fm_ratio = max(0, int(round(p.fm_ratio)))
         self._fm_index = p.fm_index
         fill_pm_wave(self._pm_wave, self._fm_ratio, self._fm_index)
@@ -111,10 +115,12 @@ class FMSynth(Synth):
         if self._fm_index:
             waveform = self._pm_wave  # shared table: no random phase, see above
         else:
-            waveform = random_phase_wave(self._wave_name)
+            waveform = random_phase_wave(
+                self._wave_name, midi_note=midi_note, sample_rate=self.synthio.sample_rate
+            )
         # fmt: off
         return (synthio.Note(f, waveform=waveform,
-                             envelope=self._env, amplitude=velocity / 127,
+                             envelope=self._env, amplitude=velocity / 127 * self.HEADROOM,
                              filter=self._make_filter(), bend=self._bend_cur),)
         # fmt: on
 
@@ -129,7 +135,7 @@ class FMSynth(Synth):
     @wave.setter
     def wave(self, v):
         self._wave_name = v
-        get_wave_2x(v)  # O(1); warms the cache for the next note-on
+        warm_wave(v, self.synthio.sample_rate)  # warms the cache for the next note-on
 
     @property
     def fm_ratio(self):

@@ -93,7 +93,7 @@ patch = Patch(
     amp_env=[0.01, 0.1, 0.7, 0.4],
 )
 synth = SubtractiveSynth(engine, patch)
-mixer.voice[0].level = 0.6
+mixer.voice[0].level = 1.0  # makeup for SubtractiveSynth.HEADROOM; the max
 
 
 _knob_filt = [knobA.value, knobB.value]

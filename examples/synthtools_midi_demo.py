@@ -23,6 +23,7 @@
 import board
 import tmidi
 import usb_midi
+from synth_setup import mixer
 from synth_setup import synth as engine
 
 from synthtools import Patch, SubtractiveSynth
@@ -63,6 +64,7 @@ patch = Patch(name="midi lead", wave="SAW", detune=1.0,
 # fmt: on
 
 synth = SubtractiveSynth(engine, patch)
+mixer.voice[0].level = 0.7  # 2x synth_setup's 0.35: makeup for SubtractiveSynth.HEADROOM
 
 # Catch a typo in CC_MAP now, at startup, rather than as a KeyError out of
 # set_param() in the middle of playing.

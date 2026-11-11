@@ -77,6 +77,19 @@ evidence that the pure-Python fallback is faithful.
   `fm_ratio` always rounds to a non-negative integer, and that `fm_index` 0
   falls back to the plain `wave` oscillator at ordinary `Synth` cost. Plus the
   `fm_*` patch fields round-trip and stay out of the live patch until saved.
+- `test_bandlimited.py` — the `SAW_BL`/`SQU_BL` per-octave tables in
+  `waves.py` and the `HEADROOM` class attribute on `SubtractiveSynth`/
+  `FMSynth`. On CPython it checks with an FFT that each table has nothing
+  above its harmonic limit and that the square has no even harmonics. On
+  both tiers it checks:
+  - every peak fits in ``volume``;
+  - each note picks its octave's table, alias-free at the top note plus
+    `BL_MARGIN`, and no duller than that needs;
+  - a detuned osc2 picks by its own pitch;
+  - `_recompile()` and the `wave` setter warm the cache;
+  - `HEADROOM` reaches `amplitude` at every note-on.
+  Whether the tables actually alias less is a render-tier question
+  (`render/FINDINGS.md` section 9).
 - `stubs/synthio.py` — no DSP. `Math`/`LFO` resolve nested blocks so `.value`
   is meaningful, which is what makes block-graph assertions possible. It
   implements only the five `MathOperation`s synthtools' engine uses, with the arithmetic

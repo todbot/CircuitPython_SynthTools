@@ -3,6 +3,7 @@
 
 import time
 
+from synth_setup import mixer
 from synth_setup import synth as engine
 
 from synthtools import FMSynth, Patch
@@ -20,6 +21,7 @@ patch1 = Patch(name="fm bell", synth_type="fm", wave="SIN",
 # fmt: on
 
 synth = FMSynth(engine, patch1)
+mixer.voice[0].level = 0.7  # 2x synth_setup's 0.35: makeup for FMSynth.HEADROOM
 
 # `wave` only sounds while FM is off (fm_index == 0): the baked FM table is
 # always a sine carrier, so there's no "wave" to pick while FM is on. Every
