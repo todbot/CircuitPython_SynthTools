@@ -4,16 +4,6 @@
 # waves.py -- waveform name -> ulab int16 array, built once, cached forever.
 #
 # All notes share these arrays by reference: zero per-note allocation.
-#
-# Also holds `Waves`, a string-keyed factory with a few extra conveniences
-# (WAV loading, LFO shape helpers) for building instruments interactively.
-# `Waves.make_waveform()` delegates to `get_wave()` for the waveform types
-# they share, rather than generating them a second way.
-#
-# adafruit_wave is imported lazily, inside Waves.wav()/wav_info() only: it
-# isn't available under plain CPython (no pip package here), and nothing
-# else in this module, the CPython test tier included, should need it just
-# to build a waveform buffer.
 
 import random
 
@@ -72,20 +62,15 @@ def _nze(size, vol):
 # its own first sample appended as a cyclic sentinel so _resample_table()'s
 # wraparound never needs a special case.
 #
-# Stored as a space-separated string, not a list/tuple literal: ruff-format
-# lays out a literal collection too long for one line one element per line,
-# turning a 129-number table into 129 source lines. A string is never
-# reflowed that way.
-
-
-def _ints(s):
-    return tuple(int(v) for v in s.split())
+# Stored as bytes, one per sample, offset by +128 since bytes are unsigned.
+# A .mpy keeps its constants in RAM for as long as the module is loaded, so
+# a text form, or a tuple parsed from one, costs several bytes a sample.
 
 
 def _resample_table(table, size, vol, peak=127):
-    """Lerp a small native ``table`` (length N+1, table[-1] == table[0]) up
-    to ``size`` samples, scaled from its own +-127-ish native range to
-    +-vol. Plain Python scalar loop, not vectorized ulab ops: the
+    """Lerp a small native ``table`` (N+1 offset bytes, table[-1] ==
+    table[0]) up to ``size`` samples, scaled from its own +-127-ish native
+    range to +-vol. Plain Python scalar loop, not vectorized ulab ops: the
     MicroPython ulab fallback (tests/stubs/ulab/numpy.py) supports only
     int/slice indexing, so there is no fancy-indexing gather to lean on
     here; same shape as _nze() above."""
@@ -96,22 +81,21 @@ def _resample_table(table, size, vol, peak=127):
         pos = (k / size) * n
         i = int(pos)
         frac = pos - i
-        a = table[i]
-        b = table[i + 1]
+        a = table[i] - 128
+        b = table[i + 1] - 128
         out.append(int(round((a * (1.0 - frac) + b * frac) * scale)))
     return np.array(out, dtype=np.int16)
 
 
 # saw_analogue512_int8.h: 512 raw int8 samples -> N=128 native, round-trip
 # RMS error 5.1% of peak at size=256.
-_ASAW_TABLE = _ints(
-    "112 103 105 101 100 97 97 94 93 90 89 86 85 82 81 79 78 75 74 71 70 "
-    "68 67 64 63 61 59 57 56 53 52 50 49 46 45 43 42 39 38 35 34 32 31 29 "
-    "28 25 24 22 21 18 17 15 14 12 11 8 7 5 4 2 1 -1 -3 -5 -6 -8 -9 -11 "
-    "-12 -15 -15 -18 -19 -21 -22 -24 -25 -27 -28 -30 -31 -33 -34 -36 -37 "
-    "-39 -40 -42 -43 -45 -46 -48 -49 -51 -52 -54 -54 -57 -57 -60 -60 -62 "
-    "-63 -65 -66 -67 -68 -71 -71 -73 -74 -76 -76 -78 -79 -81 -82 -84 -84 "
-    "-87 -87 -89 -89 -92 -91 -96 -73 81 112"
+_ASAW_TABLE = (
+    b"\xf0\xe7\xe9\xe5\xe4\xe1\xe1\xde\xdd\xda\xd9\xd6\xd5\xd2\xd1\xcf\xce\xcb\xca\xc7\xc6\xc4"
+    b"\xc3\xc0\xbf\xbd\xbb\xb9\xb8\xb5\xb4\xb2\xb1\xae\xad\xab\xaa\xa7\xa6\xa3\xa2\xa0\x9f\x9d"
+    b"\x9c\x99\x98\x96\x95\x92\x91\x8f\x8e\x8c\x8b\x88\x87\x85\x84\x82\x81\x7f\x7d\x7b\x7a\x78"
+    b"\x77\x75\x74\x71\x71\x6e\x6d\x6b\x6a\x68\x67\x65\x64\x62\x61\x5f\x5e\x5c\x5b\x59\x58\x56"
+    b"\x55\x53\x52\x50\x4f\x4d\x4c\x4a\x4a\x47\x47\x44\x44\x42\x41\x3f\x3e\x3d\x3c\x39\x39\x37"
+    b"\x36\x34\x34\x32\x31\x2f\x2e\x2c\x2c\x29\x29\x27\x27\x24\x25\x20\x37\xd1\xf0"
 )
 
 
@@ -121,11 +105,10 @@ def _asaw(size, vol):
 
 # triangle_analogue512_int8.h: 512 raw int8 samples -> N=64 native,
 # round-trip RMS error 2.6% of peak at size=256.
-_ATRI_TABLE = _ints(
-    "-106 -101 -95 -89 -84 -78 -71 -65 -58 -52 -45 -38 -31 -24 -17 -10 -2 "
-    "5 13 21 29 37 45 53 62 71 78 87 96 105 114 123 125 116 107 98 89 80 "
-    "73 64 55 47 39 31 23 15 7 0 -8 -15 -23 -30 -37 -43 -50 -57 -63 -70 "
-    "-76 -82 -88 -94 -99 -105 -106"
+_ATRI_TABLE = (
+    b"\x16\x1b\x21\x27\x2c\x32\x39\x3f\x46\x4c\x53\x5a\x61\x68\x6f\x76\x7e\x85\x8d\x95\x9d\xa5"
+    b"\xad\xb5\xbe\xc7\xce\xd7\xe0\xe9\xf2\xfb\xfd\xf4\xeb\xe2\xd9\xd0\xc9\xc0\xb7\xaf\xa7\x9f"
+    b"\x97\x8f\x87\x80\x78\x71\x69\x62\x5b\x55\x4e\x47\x41\x3a\x34\x2e\x28\x22\x1d\x17\x16"
 )
 
 
@@ -135,16 +118,13 @@ def _atri(size, vol):
 
 # square_analogue512_int8.h: 512 raw int8 samples -> N=128 native,
 # round-trip RMS error 7.5% of peak at size=256.
-_ASQU_TABLE = _ints(
-    "107 104 110 105 109 106 109 106 109 106 109 106 109 107 108 107 108 "
-    "107 108 107 108 107 108 107 108 107 108 107 108 107 108 107 108 107 "
-    "108 107 108 107 108 107 108 107 108 107 108 107 108 107 108 107 109 "
-    "106 109 106 109 106 109 106 110 104 111 102 119 38 -106 -105 -109 "
-    "-106 -109 -106 -108 -107 -108 -107 -108 -107 -108 -107 -108 -107 "
-    "-108 -107 -108 -107 -108 -107 -108 -107 -108 -107 -108 -107 -108 "
-    "-107 -108 -107 -108 -107 -108 -107 -108 -107 -108 -107 -108 -107 "
-    "-108 -107 -108 -107 -108 -107 -108 -107 -108 -107 -108 -107 -109 "
-    "-107 -109 -106 -109 -106 -110 -103 -114 -51 107"
+_ASQU_TABLE = (
+    b"\xeb\xe8\xee\xe9\xed\xea\xed\xea\xed\xea\xed\xea\xed\xeb\xec\xeb\xec\xeb\xec\xeb\xec\xeb"
+    b"\xec\xeb\xec\xeb\xec\xeb\xec\xeb\xec\xeb\xec\xeb\xec\xeb\xec\xeb\xec\xeb\xec\xeb\xec\xeb"
+    b"\xec\xeb\xec\xeb\xec\xeb\xed\xea\xed\xea\xed\xea\xed\xea\xee\xe8\xef\xe6\xf7\xa6\x16\x17"
+    b"\x13\x16\x13\x16\x14\x15\x14\x15\x14\x15\x14\x15\x14\x15\x14\x15\x14\x15\x14\x15\x14\x15"
+    b"\x14\x15\x14\x15\x14\x15\x14\x15\x14\x15\x14\x15\x14\x15\x14\x15\x14\x15\x14\x15\x14\x15"
+    b"\x14\x15\x14\x15\x14\x15\x14\x15\x13\x15\x13\x16\x13\x16\x12\x19\x0e\x4d\xeb"
 )
 
 
@@ -157,24 +137,19 @@ def _asqu(size, vol):
 # hand-drawn wave means the two plateaus don't land at equal +-magnitude
 # after normalizing to +-127 (one side is ~117 here). Inaudible, and
 # expected for any non-zero-mean source.
-_SSQU_TABLE = _ints(
-    "-5 -5 -5 -5 -5 -5 -5 -5 -4 -2 1 5 10 17 27 38 52 67 83 100 115 117 "
-    "117 117 117 117 117 117 117 117 117 117 117 117 117 113 104 96 89 85 "
-    "83 83 85 88 93 98 104 110 116 117 117 117 117 117 117 117 117 117 "
-    "117 117 117 117 117 114 113 111 110 110 110 110 111 112 114 115 116 "
-    "117 117 117 117 117 117 117 117 117 117 117 117 117 117 117 117 116 "
-    "116 116 116 116 116 116 117 117 117 117 117 117 117 117 117 117 117 "
-    "117 117 117 117 117 117 117 117 117 117 117 117 117 117 117 117 117 "
-    "117 117 117 117 117 115 113 109 103 93 81 64 44 19 -9 -40 -73 -108 "
-    "-127 -127 -127 -127 -127 -127 -127 -127 -127 -127 -127 -127 -127 "
-    "-127 -126 -112 -93 -79 -68 -61 -59 -60 -65 -72 -82 -94 -106 -117 "
-    "-126 -127 -127 -127 -127 -127 -127 -127 -127 -127 -127 -127 -127 "
-    "-127 -124 -120 -116 -114 -113 -113 -113 -114 -116 -118 -121 -124 "
-    "-126 -127 -127 -127 -127 -127 -127 -127 -127 -127 -127 -127 -127 "
-    "-127 -127 -126 -125 -125 -124 -124 -124 -124 -125 -125 -126 -126 "
-    "-127 -127 -127 -127 -127 -127 -127 -127 -127 -127 -127 -127 -127 "
-    "-127 -127 -127 -127 -127 -127 -127 -127 -127 -127 -127 -127 -127 "
-    "-127 -127 -127 -127 -127 -127 -5"
+_SSQU_TABLE = (
+    b"\x7b\x7b\x7b\x7b\x7b\x7b\x7b\x7b\x7c\x7e\x81\x85\x8a\x91\x9b\xa6\xb4\xc3\xd3\xe4\xf3\xf5"
+    b"\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf1\xe8\xe0\xd9\xd5\xd3\xd3\xd5\xd8"
+    b"\xdd\xe2\xe8\xee\xf4\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf2\xf1\xef"
+    b"\xee\xee\xee\xee\xef\xf0\xf2\xf3\xf4\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5"
+    b"\xf5\xf5\xf5\xf4\xf4\xf4\xf4\xf4\xf4\xf4\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5"
+    b"\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf5\xf3"
+    b"\xf1\xed\xe7\xdd\xd1\xc0\xac\x93\x77\x58\x37\x14\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01"
+    b"\x01\x01\x01\x01\x02\x10\x23\x31\x3c\x43\x45\x44\x3f\x38\x2e\x22\x16\x0b\x02\x01\x01\x01"
+    b"\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x08\x0c\x0e\x0f\x0f\x0f\x0e\x0c\x0a\x07\x04"
+    b"\x02\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x02\x03\x03\x04\x04\x04\x04"
+    b"\x03\x03\x02\x02\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01"
+    b"\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x7b"
 )
 
 
@@ -244,13 +219,15 @@ def get_wave_2x(name, size=256, volume=28000):
     like get_wave() itself: not a per-voice or per-note cost. This is the
     shared source buffer random_phase_wave() slices from: doubling the
     length means any offset in [0, size) has a full cycle available without
-    having to wrap around the end."""
+    having to wrap around the end. get_wave() then returns a view of its
+    first cycle, so the two share one buffer."""
     key = (name, size)
     w = _2x_cache.get(key)
     if w is None:
         base = get_wave(name, size, volume)
         w = np.concatenate((base, base))
         _2x_cache[key] = w
+        _cache[key] = w[:size]
     return w
 
 
@@ -316,7 +293,7 @@ def get_wave_bl(name, sample_rate, size=BL_SIZE, volume=28000):
     at 250 MHz, ~1 s for ``SAW_BL`` and 0.5-0.8 s for ``SQU_BL`` (the higher
     figure with a chord sounding), so warm it at patch load, never at
     note-on. Costs ``2 * 2 * size`` bytes per distinct table: measured
-    18.5-22 KB of heap per shape at 512 samples and 22050 Hz."""
+    19.4 KB of heap per shape at 512 samples and 22050 Hz."""
     key = (name, size, sample_rate)
     tables = _bl_cache.get(key)
     if tables is None:
@@ -495,165 +472,3 @@ def fill_env_rise(buf, curve=1):
         # Endpoints stay exact for any curve because linspace pins its last
         # element: (1-t) is exactly 1.0 at index 0 and 0.0 at the end.
         buf[:] = np.array(_curve_ramp(1.0, 0.0, n, curve) * (-ENV_PEAK) + ENV_PEAK, dtype=np.int16)
-
-
-# ======================================================================
-# Zone 3: Waves, a string-keyed interactive factory + WAV loading.
-#
-# Never imported anywhere else in this package: every other module uses the
-# zone-1/zone-2 functions above directly. This exists purely as a
-# convenience for building instruments interactively (REPL/notebook).
-# ======================================================================
-
-_NAME_ALIASES = {
-    "SIN": "SIN",
-    "SINE": "SIN",
-    "SQU": "SQU",
-    "SQUARE": "SQU",
-    "SAW": "SAW",
-    "TRI": "TRI",
-    "TRIANGLE": "TRI",
-    "NZE": "NZE",
-    "NOISE": "NZE",
-    "ASAW": "ASAW",
-    "ANALOG_SAW": "ASAW",
-    "ATRI": "ATRI",
-    "ANALOG_TRI": "ATRI",
-    "ASQU": "ASQU",
-    "ANALOG_SQU": "ASQU",
-    "SSQU": "SSQU",
-    "SMOOTH_SQU": "SSQU",
-}
-
-
-class Waves:
-    """
-    Generate waveforms for either oscillator or LFO use.
-    By default, size is 256, volume is max +-32767
-    """
-
-    waveform_types = ("SIN", "SQU", "SAW", "TRI", "SIL", "NZE", "ASAW", "ATRI", "ASQU", "SSQU")
-
-    # --- factory + basic oscillator waveforms (delegate to get_wave) ---
-
-    @staticmethod
-    def make_waveform(waveid, size=256, volume=32767):
-        """Return a waveform by string name, one of ``waveform_types``.
-
-        Delegates to ``get_wave()`` for the types it also builds, rather than
-        generating them a second way; SIL has no ``get_wave`` equivalent and
-        stays local.
-        """
-        waveid = waveid.upper()
-        if waveid in ("SIL", "SILENCE"):
-            return Waves.silence(size)
-        canonical = _NAME_ALIASES.get(waveid)
-        if canonical is None:
-            print("unknown wave type", waveid)
-            return None
-        return get_wave(canonical, size, volume)
-
-    @staticmethod
-    def sine(size, volume):
-        """Sine waveform"""
-        return get_wave("SIN", size, volume)
-
-    @staticmethod
-    def square(size, volume):
-        """Square waveform"""
-        return get_wave("SQU", size, volume)
-
-    @staticmethod
-    def triangle(size, min_vol, max_vol):
-        """Triangle waveform. ``get_wave``'s TRI is symmetric about 0, so this
-        only delegates when min_vol/max_vol are the usual +-volume pair."""
-        if min_vol == -max_vol:
-            return get_wave("TRI", size, max_vol)
-        return np.concatenate(
-            (
-                np.linspace(min_vol, max_vol, num=size // 2, dtype=np.int16),
-                np.linspace(max_vol, min_vol, num=size // 2, dtype=np.int16),
-            )
-        )
-
-    @staticmethod
-    def saw(size, volume):
-        """Saw (aka Ramp) waveform"""
-        return Waves.saw_down(size, volume)
-
-    @staticmethod
-    def saw_down(size, volume):
-        """Saw waveform from max to min"""
-        return get_wave("SAW", size, volume)
-
-    @staticmethod
-    def saw_up(size, volume):
-        """Saw waveform from min to max"""
-        return np.linspace(-volume, volume, num=size, dtype=np.int16)
-
-    @staticmethod
-    def silence(size):
-        """All zeros waveform"""
-        return np.zeros(size, dtype=np.int16)
-
-    @staticmethod
-    def noise(size, volume):
-        """White noise waveform (from random.randint)"""
-        return get_wave("NZE", size, volume)
-
-    @staticmethod
-    def from_list(vals):
-        """Waveform from a list of values, useful for LFOs"""
-        return np.array([int(v) for v in vals], dtype=np.int16)
-
-    # --- LFO / position shapes -------------------------------------------
-
-    @staticmethod
-    def lfo_ramp_up_pos():
-        """Simple two-element ramp-up waveform for synthio.LFO (which does
-        interpolation). A fresh array, NOT ramp_wave()'s cached one: that
-        one is shared (by _vib_fade, _glide_pos, and the wavetable-LFO
-        once=True shapes) and its own docstring says so; aliasing it here
-        would let an interactive caller mutate it and silently break every
-        synth using it."""
-        return np.array((0, ENV_PEAK), dtype=np.int16)
-
-    @staticmethod
-    def lfo_ramp_down_pos():
-        """Simple two-element ramp-down waveform for synthio.LFO (which does interpolation)"""
-        return np.array((32767, 0), dtype=np.int16)
-
-    @staticmethod
-    def lfo_triangle_pos():
-        """Simple three-element triangle waveform for synthio.LFO (which does
-        interpolation). NOT the same shape as saw_wave() once looped: see
-        saw_wave()'s docstring for why a short buffer's wrap interpolates
-        back to a triangle rather than a sawtooth."""
-        return np.array((0, 32767, 0), dtype=np.int16)
-
-    @staticmethod
-    def lfo_triangle():
-        """Simple four-element triangle waveform for synthio.LFO (which does interpolation)"""
-        return np.array((0, 32767, 0, -32767), dtype=np.int16)
-
-    # --- WAV file I/O ------------------------------------------------------
-
-    @staticmethod
-    def wav(filepath, size=256, pos=0):
-        """Create a waveform from a WAV file using adafruit_wave"""
-        import adafruit_wave
-
-        with adafruit_wave.open(filepath) as w:
-            if w.getsampwidth() != 2 or w.getnchannels() != 1:
-                raise ValueError("unsupported format")
-            n = size
-            w.setpos(pos)
-            return np.frombuffer(w.readframes(n), dtype=np.int16)
-
-    @staticmethod
-    def wav_info(filepath):
-        """return (nframes,nchannels,sampwidth) from a WAV filename"""
-        import adafruit_wave
-
-        with adafruit_wave.open(filepath) as w:
-            return (w.getnframes(), w.getnchannels(), w.getsampwidth())

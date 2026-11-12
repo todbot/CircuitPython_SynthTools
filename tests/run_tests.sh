@@ -36,6 +36,7 @@ if command -v python3 >/dev/null 2>&1; then
     run python3 tests/test_wiring.py
     run python3 tests/test_fm_synth.py
     run python3 tests/test_bandlimited.py
+    run python3 tests/test_waves.py
     run python3 tests/test_swarm_synth.py
     run python3 tests/test_mono.py
     run python3 tests/test_audio_fx.py
@@ -56,6 +57,7 @@ if command -v micropython >/dev/null 2>&1; then
     run micropython tests/test_wiring.py
     run micropython tests/test_fm_synth.py
     run micropython tests/test_bandlimited.py
+    run micropython tests/test_waves.py
     run micropython tests/test_swarm_synth.py
     run micropython tests/test_mono.py
     run micropython tests/test_audio_fx.py

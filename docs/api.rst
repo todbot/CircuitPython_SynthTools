@@ -82,6 +82,12 @@ Waves
 .. automodule:: synthtools.waves
     :members:
 
+Wave Factory
+============
+
+.. automodule:: synthtools.wave_factory
+    :members:
+
 Harmony
 =======
 

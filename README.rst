@@ -128,7 +128,7 @@ What's Included
   own cutoff and resonance for a steeper slope (needs ``audiofilters`` in
   the build)
 * ``Waves`` -- waveform factory (saw, square, sine, triangle, noise, and
-  "analog" variants)
+  "analog" variants), in ``synthtools.wave_factory``
 * ``Wavetable`` -- loads a wavetable WAV file and lerps between frames
 * ``AHREnvelope`` -- shared-block attack/release envelope, used for both
   the filter and pitch envelopes

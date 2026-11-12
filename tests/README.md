@@ -90,6 +90,11 @@ evidence that the pure-Python fallback is faithful.
   - `HEADROOM` reaches `amplitude` at every note-on.
   Whether the tables actually alias less is a render-tier question
   (`render/FINDINGS.md` section 9).
+- `test_waves.py` — golden values pin the Mozzi-derived ASAW/ATRI/ASQU/SSQU
+  tables, since that hand-drawn data has no recipe to regenerate it. Also
+  checks that `get_wave()` becomes a view of the `get_wave_2x()` buffer
+  once that exists (on CPython), and that `wave_factory.Waves` still
+  reaches `get_wave()`.
 - `stubs/synthio.py` — no DSP. `Math`/`LFO` resolve nested blocks so `.value`
   is meaningful, which is what makes block-graph assertions possible. It
   implements only the five `MathOperation`s synthtools' engine uses, with the arithmetic
