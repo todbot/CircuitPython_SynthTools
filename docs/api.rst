@@ -82,6 +82,12 @@ Waves
 .. automodule:: synthtools.waves
     :members:
 
+Band-limited Waves
+==================
+
+.. automodule:: synthtools.waves_bl
+    :members:
+
 Wave Factory
 ============
 

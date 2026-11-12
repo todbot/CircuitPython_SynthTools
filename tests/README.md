@@ -78,10 +78,11 @@ evidence that the pure-Python fallback is faithful.
   falls back to the plain `wave` oscillator at ordinary `Synth` cost. Plus the
   `fm_*` patch fields round-trip and stay out of the live patch until saved.
 - `test_bandlimited.py` — the `SAW_BL`/`SQU_BL` per-octave tables in
-  `waves.py` and the `HEADROOM` class attribute on `SubtractiveSynth`/
+  `waves_bl.py` and the `HEADROOM` class attribute on `SubtractiveSynth`/
   `FMSynth`. On CPython it checks with an FFT that each table has nothing
   above its harmonic limit and that the square has no even harmonics. On
   both tiers it checks:
+  - `waves_bl` is loaded only once a `*_BL` name is asked for;
   - every peak fits in ``volume``;
   - each note picks its octave's table, alias-free at the top note plus
     `BL_MARGIN`, and no duller than that needs;

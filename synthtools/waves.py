@@ -186,31 +186,6 @@ def wave_names():
     return list(_builders.keys())
 
 
-def fill_pm_wave(buf, ratio, index, volume=28000):
-    """Classic 2-operator phase-modulation carrier, written IN PLACE:
-
-        sin(theta + index * sin(ratio * theta))    theta in [0, 2*pi)
-
-    ``ratio`` MUST be a non-negative integer: the modulator has to complete
-    a whole number of cycles per carrier cycle, or ``buf[-1]`` won't match
-    ``buf[0]`` and every note buzzes at the loop point. ``index`` is the
-    modulation depth in radians (0 = plain sine, 1-3 = classic FM, 5+ =
-    harsh); it does not need clamping since the outer sin() stays in
-    [-1, 1] regardless of depth.
-
-    A ``size``-sample table can only represent up to ``size // 2`` harmonics,
-    and phase modulation spreads energy out to roughly ``ratio * (index+1)``
-    harmonics: past that the table is aliased before the note is ever
-    played, so keep ratio and index modest for a small buffer.
-
-    Written in place so every voice sharing this buffer (see fm_synth.py)
-    morphs the instant a knob changes, the same idiom as fill_env_rise()."""
-    n = len(buf)
-    theta = np.linspace(0, 2 * np.pi, num=n, endpoint=False)
-    mod = np.sin(theta * ratio) * index
-    buf[:] = np.array(np.sin(theta + mod) * volume, dtype=np.int16)
-
-
 _2x_cache = {}  # (name, size) -> np.array, two cycles of get_wave() back to back
 
 
@@ -231,82 +206,25 @@ def get_wave_2x(name, size=256, volume=28000):
     return w
 
 
-# --- band-limited tables ------------------------------------------------
-#
-# synthio's oscillator is a plain truncating table lookup, so every harmonic
-# a table holds above Nyquist folds back as an inharmonic alias: a naive
-# SAW at A4 and 22050 Hz carries junk only ~16 dB under its harmonics. A
-# *_BL name holds one additive table per octave instead, each with only the
-# harmonics that stay under Nyquist at the top of its octave plus
-# BL_MARGIN semitones. The table is picked at note-on, so pitch moved
-# further after press (wheel, glide) can still alias, and the lowest note
-# of each octave loses its top harmonics (to ~5 kHz at 22050).
-
-#: band-limited table length; truncation noise falls ~6 dB per doubling
-BL_SIZE = 512
-#: semitones of upward bend a band-limited table absorbs before aliasing
-BL_MARGIN = 2
-# A band-limited saw/square rings ~18% past its own peak (Gibbs), so the
-# tables are scaled down by that to keep the ringing inside `volume`.
-_GIBBS = 1.18
-
-_BL_ODD = {"SAW_BL": False, "SQU_BL": True}  # name -> odd harmonics only
-_bl_cache = {}  # (name, size, sample_rate) -> 128-tuple: midi note -> 2x table
+_get_wave_bl = None  # waves_bl.get_wave_bl, once a *_BL name is first used
 
 
-def _bl_kmax(octave, sample_rate, size):
-    top_hz = 440.0 * 2 ** ((octave * 12 + 11 + BL_MARGIN - 69) / 12)
-    return max(1, min(size // 2 - 1, int(sample_rate / 2 / top_hz)))
+def _load_bl():
+    # once, not per call: a function-level import measured ~75 us a call on
+    # rp2040, and random_phase_wave() is on the note-on path
+    global _get_wave_bl
+    from .waves_bl import get_wave_bl
 
-
-def _build_bl(odd, sample_rate, size, volume):
-    kmaxes = [_bl_kmax(octave, sample_rate, size) for octave in range(11)]
-    # each octave's table is a partial sum of the same series, so one running
-    # sum, snapshotted at each kmax, builds the whole set
-    theta = np.linspace(0, 2 * np.pi, num=size, endpoint=False)
-    scale = volume / _GIBBS * (4 if odd else 2) / np.pi
-    acc = np.zeros(size)
-    by_kmax = {}
-    k = 0
-    for kmax in sorted(set(kmaxes)):
-        while k < kmax:
-            k += 1
-            if not (odd and k % 2 == 0):
-                acc += np.sin(theta * k) * (1 / k)
-        f = acc * scale
-        # a square's lone fundamental is 4/pi tall, taller than any ringing.
-        # Both series are odd-symmetric, so min(f) is -max(f).
-        peak = max(f)
-        if peak > volume:
-            f = f * (volume / peak)
-        w = np.array(f, dtype=np.int16)
-        by_kmax[kmax] = np.concatenate((w, w))
-    return tuple(by_kmax[kmaxes[n // 12]] for n in range(128))
-
-
-def get_wave_bl(name, sample_rate, size=BL_SIZE, volume=28000):
-    """Band-limited tables for ``name`` (``SAW_BL`` or ``SQU_BL``) at
-    ``sample_rate``, as a 128-tuple indexed by midi note. Each entry is two
-    cycles long, like get_wave_2x(), and notes in one octave share one.
-
-    Built once and cached, but the first call is slow: measured on an rp2040
-    at 250 MHz, ~1 s for ``SAW_BL`` and 0.5-0.8 s for ``SQU_BL`` (the higher
-    figure with a chord sounding), so warm it at patch load, never at
-    note-on. Costs ``2 * 2 * size`` bytes per distinct table: measured
-    19.4 KB of heap per shape at 512 samples and 22050 Hz."""
-    key = (name, size, sample_rate)
-    tables = _bl_cache.get(key)
-    if tables is None:
-        tables = _build_bl(_BL_ODD[name], sample_rate, size, volume)
-        _bl_cache[key] = tables
-    return tables
+    _get_wave_bl = get_wave_bl
 
 
 def warm_wave(name, sample_rate):
     """Build whatever random_phase_wave() slices ``name`` from, so the
     note-on path never has to."""
-    if name in _BL_ODD:
-        get_wave_bl(name, sample_rate)
+    if name.endswith("_BL"):
+        if _get_wave_bl is None:
+            _load_bl()
+        _get_wave_bl(name, sample_rate)
     else:
         get_wave_2x(name)
 
@@ -322,10 +240,12 @@ def random_phase_wave(name, size=256, volume=28000, midi_note=None, sample_rate=
     per oscillator per note-on, not from a hot path.
 
     A band-limited name needs ``midi_note`` and ``sample_rate`` to pick its
-    table from get_wave_bl(), and is ``BL_SIZE`` long whatever ``size``
-    says."""
-    if name in _BL_ODD:
-        wave2x = get_wave_bl(name, sample_rate)[min(int(midi_note), 127)]
+    table from waves_bl.get_wave_bl(), and is ``waves_bl.BL_SIZE`` long
+    whatever ``size`` says."""
+    if name.endswith("_BL"):
+        if _get_wave_bl is None:
+            _load_bl()
+        wave2x = _get_wave_bl(name, sample_rate)[min(int(midi_note), 127)]
     else:
         wave2x = get_wave_2x(name, size, volume)
     size = len(wave2x) // 2
@@ -334,11 +254,10 @@ def random_phase_wave(name, size=256, volume=28000, midi_note=None, sample_rate=
 
 
 # ======================================================================
-# Zone 2: position-LFO shapes. One-shot/repeat arrays used as a POSITION
-# (envelopes, vibrato fade-in, glide, wave-position sweeps), not as an
-# oscillator's audio waveform. Two read-only cached fixed shapes
-# (ramp_wave, saw_wave) plus one mutable, curve-shaped buffer system
-# (env_buffer/fill_env_rise) for the AHR envelope.
+# Zone 2: position-LFO shapes. One-shot arrays used as a POSITION
+# (envelopes, vibrato fade-in, glide), not as an oscillator's audio
+# waveform. One read-only cached ramp (ramp_wave) plus one mutable,
+# curve-shaped buffer system (env_buffer/fill_env_rise) for the AHR envelope.
 #
 # A synthio.LFO with once=True runs its waveform once and then holds the
 # final sample forever, so a buffer holding nothing but a rise 0 -> peak
@@ -351,7 +270,7 @@ def random_phase_wave(name, size=256, volume=28000, midi_note=None, sample_rate=
 ENV_SIZE = 64
 ENV_PEAK = 32767
 
-# --- read-only cached fixed shapes --------------------------------------
+# --- read-only cached ramp ----------------------------------------------
 
 _ramp = None
 
@@ -373,28 +292,6 @@ def ramp_wave():
     if _ramp is None:
         _ramp = np.array((0, ENV_PEAK), dtype=np.int16)
     return _ramp
-
-
-_saw_lfo = None
-
-
-def saw_wave():
-    """A cached 0 -> peak ramp across ENV_SIZE samples, for a wave-position
-    LFO's "saw" shape in repeat mode.
-
-    Per the synthio tutorial, LFO interpolates the wrap from the last
-    sample back to the first, so a short buffer (ramp_wave()'s 2 samples,
-    say) loops as a TRIANGLE (up then back down across the wrap), not a
-    saw. The wrap has to be a small fraction of the cycle instead, which
-    needs enough samples that the rise dominates: with ENV_SIZE points the
-    wrap is one interpolation step, 1/ENV_SIZE of the cycle.
-
-    once=True doesn't need this (ramp_wave() alone already gives a clean
-    ramp that holds at the top) so this is repeat-mode only."""
-    global _saw_lfo
-    if _saw_lfo is None:
-        _saw_lfo = np.linspace(0, ENV_PEAK, num=ENV_SIZE, dtype=np.int16)
-    return _saw_lfo
 
 
 # --- mutable, curve-shaped buffer (the AHR envelope's rise) -------------

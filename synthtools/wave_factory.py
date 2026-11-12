@@ -137,9 +137,9 @@ class Waves:
     @staticmethod
     def lfo_triangle_pos():
         """Simple three-element triangle waveform for synthio.LFO (which does
-        interpolation). NOT the same shape as saw_wave() once looped: see
-        saw_wave()'s docstring for why a short buffer's wrap interpolates
-        back to a triangle rather than a sawtooth."""
+        interpolation). Looped, a two-sample ramp plays as this same
+        triangle, since the LFO interpolates its wrap from the last sample
+        back to the first."""
         return np.array((0, 32767, 0), dtype=np.int16)
 
     @staticmethod

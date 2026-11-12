@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 Tod Kurt
 # SPDX-License-Identifier: MIT
-"""Checks for the band-limited SAW_BL/SQU_BL tables in synthtools/waves.py
+"""Checks for the band-limited SAW_BL/SQU_BL tables in synthtools/waves_bl.py
 and the HEADROOM class attribute on SubtractiveSynth/FMSynth.
 
 The spectral checks (nothing above each table's harmonic limit, no even
@@ -20,10 +20,7 @@ sys.path.insert(0, _D + "/..")
 
 import synthio  # noqa: E402
 from synthtools import FMSynth, Patch, SubtractiveSynth  # noqa: E402
-from synthtools.waves import (  # noqa: E402
-    BL_MARGIN, BL_SIZE, _bl_cache, _bl_kmax, get_wave_2x, get_wave_bl,
-    random_phase_wave,
-)
+from synthtools.waves import get_wave_2x, random_phase_wave  # noqa: E402
 
 fails = []
 
@@ -31,6 +28,25 @@ fails = []
 def ck(cond, msg):
     if not cond:
         fails.append(msg)
+
+
+# --- waves_bl is loaded only for a *_BL name -----------------------------
+# Before anything below imports it.
+def bl_loaded():
+    return any(m.endswith(".waves_bl") for m in sys.modules)
+
+
+lazy = SubtractiveSynth(synthio.Synthesizer(), Patch(wave="SAW"))
+lazy.note_on(60)
+ck(not bl_loaded(), "a SAW synth must not load waves_bl")
+lazy.wave = "SAW_BL"
+lazy.note_on(62)
+ck(bl_loaded(), "a SAW_BL synth must load waves_bl")
+lazy.all_notes_off()
+
+from synthtools.waves_bl import (  # noqa: E402
+    BL_MARGIN, BL_SIZE, _bl_cache, _bl_kmax, get_wave_bl,
+)
 
 
 def hz(m):
