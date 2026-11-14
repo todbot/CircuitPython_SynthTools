@@ -48,4 +48,5 @@ echo "render: $MP"
 
 echo
 echo "analyze: $(command -v python3)"
-python3 tests/render/analyze_renders.py --outdir "$OUT" --max-shape-thdn-db -50
+python3 tests/render/analyze_renders.py --outdir "$OUT" --max-shape-thdn-db -50 \
+    --max-bl-inharmonic-db -30

@@ -4,6 +4,7 @@
 # code.py - synthtools instrument demo for RP2040-class boards, CircuitPython 10+
 import time
 
+from synth_setup import mixer
 from synth_setup import synth as engine
 
 from synthtools import Patch, SubtractiveSynth
@@ -22,6 +23,7 @@ patch = Patch(name="fat bass", wave="ASAW", detune=1.004,
 # fmt: on
 
 synth = SubtractiveSynth(engine, patch)
+mixer.voice[0].level = 0.7  # 2x synth_setup's 0.35: makeup for SubtractiveSynth.HEADROOM
 
 # JSON round-trip (saving to CIRCUITPY needs storage.remount from boot.py):
 patch_json = patch.to_json()

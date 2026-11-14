@@ -41,7 +41,7 @@ This driver depends on:
 
 * `Adafruit CircuitPython <https://github.com/adafruit/circuitpython>`_
 * `Adafruit CircuitPython Ticks <https://github.com/adafruit/Adafruit_CircuitPython_Ticks>`_
-  (``StepSequencer``)
+
 
 Please ensure all dependencies are available on the CircuitPython filesystem.
 This is easily achieved by downloading
@@ -128,7 +128,7 @@ What's Included
   own cutoff and resonance for a steeper slope (needs ``audiofilters`` in
   the build)
 * ``Waves`` -- waveform factory (saw, square, sine, triangle, noise, and
-  "analog" variants)
+  "analog" variants), in ``synthtools.wave_factory``
 * ``Wavetable`` -- loads a wavetable WAV file and lerps between frames
 * ``AHREnvelope`` -- shared-block attack/release envelope, used for both
   the filter and pitch envelopes

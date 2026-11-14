@@ -18,6 +18,7 @@
 
 import json
 import os
+import random
 import sys
 
 _here = __file__.rsplit("/", 1)[0]
@@ -36,6 +37,7 @@ import audiomixer  # noqa: E402
 import synthio  # noqa: E402
 import ulab.numpy as np  # noqa: E402
 from synthtools.patch import Patch  # noqa: E402  direct import: dodge __init__ lazy trap
+from synthtools.subtractive_synth import SubtractiveSynth  # noqa: E402
 from synthtools.wavetable_synth import WavetableSynth  # noqa: E402
 from wavhdr import write_wav  # noqa: E402
 
@@ -69,6 +71,25 @@ def build(sr, ch, wave_file, wave_pos, filt_type, filt_q, env):
         filt_track=0.0,
     )
     return eng, WavetableSynth(eng, p)
+
+
+def build_sub(sr, ch, wave, detune, filt_type, filt_q, env):
+    eng = synthio.Synthesizer(sample_rate=sr, channel_count=ch)
+    p = Patch(
+        wave=wave,
+        detune=detune,
+        filt_type=filt_type,
+        filt_q=filt_q,
+        amp_env=list(env),
+        vib_depth=0.0,
+        penv_amount=0.0,
+        penv_out_amount=0.0,
+        fenv_amount=0,
+        filt_lfo_amount=0,
+        filt_vel=0,
+        filt_track=0.0,
+    )
+    return eng, SubtractiveSynth(eng, p)
 
 
 def scale_wavetable(syn, factor):
@@ -110,17 +131,24 @@ CHORDS = {
     6: (45, 52, 57, 64, 69, 76),
 }
 SPREAD = {3: (31, 50, 70), 6: (26, 43, 58, 71, 83, 94)}
+BL_NOTES = (36, 57, 69, 81, 93)  # 65, 220, 440, 880, 1760 Hz
+# SubtractiveSynth headroom chords: (case tag, wave, detune). SIN is the one
+# that exposes the limiter: a dense saw chord hides it.
+SUB_CHORDS = (("single", "SAW", 1.0), ("det", "SAW", 1.001), ("sin", "SIN", 1.0))
 
 
 def case(cid, group, notes, note_amp=1.0, wt_scale=1.0, mixer_level=0.25,
          sr=44100, ch=1, wave_file=DEFAULT_WT, wave_pos=WAVE_POS,
          filt_type=None, filt_q=1.1, env=None, raw_notes=False,
-         through_mixer=False, wt_headroom=None):
+         through_mixer=False, wt_headroom=None, synth="wt", wave="SAW",
+         detune=1.0, headroom=None, frames=RENDER_FRAMES):
     return dict(id=cid, group=group, notes=list(notes), note_amp=note_amp,
                 wt_scale=wt_scale, mixer_level=mixer_level, sr=sr, ch=ch,
                 wave_file=wave_file, wave_pos=wave_pos, filt_type=filt_type,
                 filt_q=filt_q, env=list(env or STEADY_ENV), raw_notes=raw_notes,
-                through_mixer=through_mixer, wt_headroom=wt_headroom)
+                through_mixer=through_mixer, wt_headroom=wt_headroom,
+                synth=synth, wave=wave, detune=detune, headroom=headroom,
+                frames=frames)
 
 
 def build_cases():
@@ -183,10 +211,45 @@ def build_cases():
         cs.append(case("ship_fixed_n%d" % n, "ship", CHORDS[n],
                        filt_type=None, wt_headroom=0.5, mixer_level=0.5))
 
+    # 8. SubtractiveSynth.HEADROOM through the real _make_notes path, at the
+    #    rig rate. Random phases are seeded per chord, so the notional
+    #    (provably linear) render has the same phases as the ones it scores.
+    for tag, wave, det in SUB_CHORDS:
+        for n in (1, 2, 3, 4, 5):
+            kw = dict(synth="sub", sr=22050, filt_type=None, wave=wave, detune=det)
+            cs.append(case("sub_notional_%s_n%d" % (tag, n), "sub_notional", CHORDS[n],
+                           headroom=1.0 / (2 * n), **kw))
+            cs.append(case("sub_raw_%s_n%d" % (tag, n), "sub_ship", CHORDS[n],
+                           headroom=1.0, mixer_level=0.25, **kw))
+            cs.append(case("sub_fixed_%s_n%d" % (tag, n), "sub_ship", CHORDS[n],
+                           headroom=0.5, mixer_level=0.5, **kw))
+
+    # 9. aliasing: one held note, naive SAW vs SAW_BL, filter off and stock
+    #    LPF, long renders so the analyzer's harmonic bins stay narrow
+    for m in BL_NOTES:
+        for wave in ("SAW", "SAW_BL"):
+            for filt, ft in (("off", None), ("lpf", "LPF")):
+                cs.append(case("bl_%s_%s_m%d" % (wave, filt, m), "bl", (m,),
+                               synth="sub", sr=22050, filt_type=ft, wave=wave,
+                               headroom=0.5, frames=65536))
+
     return cs
 
 
+def run_sub_case(c):
+    eng, syn = build_sub(c["sr"], c["ch"], c["wave"], c["detune"],
+                         c["filt_type"], c["filt_q"], c["env"])
+    random.seed(len(c["notes"]))
+    SubtractiveSynth.HEADROOM = c["headroom"]
+    for n in c["notes"]:
+        syn.note_on(n, 127)
+    SubtractiveSynth.HEADROOM = 0.5
+    return render(eng, c["frames"], c["ch"])
+
+
 def run_case(c):
+    if c["synth"] == "sub":
+        return run_sub_case(c)
     eng, syn = build(c["sr"], c["ch"], c["wave_file"], c["wave_pos"],
                      c["filt_type"], c["filt_q"], c["env"])
     scale_wavetable(syn, c["wt_scale"])
@@ -216,7 +279,7 @@ def run_case(c):
         mix.voice[0].play(eng)
         mix.voice[0].level = c["mixer_level"]
         src = mix
-    return render(src, RENDER_FRAMES, c["ch"])
+    return render(src, c["frames"], c["ch"])
 
 
 def main():

@@ -14,6 +14,7 @@
 
 import time
 
+from synth_setup import mixer
 from synth_setup import synth as engine
 
 from synthtools import Patch, SubtractiveSynth
@@ -25,6 +26,7 @@ patch = Patch(name="harmony demo", wave="ATRI",
               filt_type="LPF", filt_f=3600, filt_q=1.7)
 # fmt: on
 synth = SubtractiveSynth(engine, patch)
+mixer.voice[0].level = 0.7  # 2x synth_setup's 0.35: makeup for SubtractiveSynth.HEADROOM
 
 # (key note, scale name) -- MIDI 48 is C3
 PROGRESSION = (

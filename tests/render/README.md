@@ -9,14 +9,18 @@ SPDX-License-Identifier: MIT
 Renders the real synth classes to WAV **without hardware** and measures the
 result, so a patch's actual sound can be checked in CI-adjacent conditions.
 Built to diagnose `WavetableSynth` distortion on 3+ note chords; see
-`FINDINGS.md` for that result.
+`FINDINGS.md` for that result. Sections 8-9 there cover `SubtractiveSynth`:
+its `HEADROOM` on chords, and naive `SAW` vs band-limited `SAW_BL` aliasing.
 
 ## How it works
 
 - **Render side** (`render_chords.py`) runs under a CircuitPython *unix* build.
-  It builds a real `WavetableSynth` on a real `synthio.Synthesizer`, presses
-  chords, and pulls PCM with `audiocore.get_buffer()` in a loop (no real-time,
-  no audio device). `get_buffer` is only exposed when the build sets
+  It builds a real `WavetableSynth` or `SubtractiveSynth` on a real
+  `synthio.Synthesizer`, presses chords, and pulls PCM with
+  `audiocore.get_buffer()` in a loop (no real-time, no audio device).
+  `SubtractiveSynth` cases seed `random` per chord, so the random phase each
+  note-on rolls matches between a case and its linear reference.
+  `get_buffer` is only exposed when the build sets
   `CIRCUITPY_AUDIOCORE_DEBUG=1`, i.e. the `coverage` variant.
 - **Analysis side** (`analyze_renders.py`) runs under desktop CPython
   (`numpy` + stdlib `wave`). It computes peak / RMS / crest / clip counts and a

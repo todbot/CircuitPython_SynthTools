@@ -25,6 +25,7 @@
 
 import time
 
+from synth_setup import mixer
 from synth_setup import synth as engine
 
 from synthtools import Patch, SubtractiveSynth
@@ -59,6 +60,7 @@ patch = Patch(
 )
 
 synth = SubtractiveSynth(engine, patch)
+mixer.voice[0].level = 0.7  # 2x synth_setup's 0.35: makeup for SubtractiveSynth.HEADROOM
 
 # --- the short-note riff, for pitch-envelope gestures -------------------
 # lifetime = gate + amp release = 0.28 + 0.25 = 0.53s against a 0.45s beat,

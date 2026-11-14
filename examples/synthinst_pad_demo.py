@@ -38,6 +38,7 @@
 
 import time
 
+from synth_setup import mixer
 from synth_setup import synth as engine
 
 from synthtools import Patch, SubtractiveSynth
@@ -65,6 +66,7 @@ patch = Patch(
 )
 
 synth = SubtractiveSynth(engine, patch)
+mixer.voice[0].level = 0.7  # 2x synth_setup's 0.35: makeup for SubtractiveSynth.HEADROOM
 
 Am = (45, 52 + 12, 57, 60)  # A2 E4 A3 C4
 G = (43, 50, 55, 59)  # G2 D3 G3 B3

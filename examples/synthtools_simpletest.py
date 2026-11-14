@@ -3,6 +3,7 @@
 
 import time
 
+from synth_setup import mixer
 from synth_setup import synth as engine
 
 from synthtools import Patch, SubtractiveSynth
@@ -20,6 +21,7 @@ patch1 = Patch(name="fat bass", wave="ASAW", detune=1.004,
 # fmt: on
 
 synth = SubtractiveSynth(engine, patch1)
+mixer.voice[0].level = 0.7  # 2x synth_setup's 0.35: makeup for SubtractiveSynth.HEADROOM
 
 # JSON round-trip
 patch_json = patch1.to_json()
